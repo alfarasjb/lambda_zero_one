@@ -79,15 +79,15 @@ void create_comments(){
    double true_risk = InpRiskAmount * InpAllocation;
    int ea_positions = ArraySize(TRADES_ACTIVE.active_positions);
    Comment(
-      "Symbol Tick Value: ", interval_trade.tick_value, "\n",
-      "Symbol Trade Points: ", interval_trade.trade_points, "\n",
+      "Symbol Tick Value: ", interval_trade.TICK_VALUE(), "\n",
+      "Symbol Trade Points: ", interval_trade.TRADE_POINTS(), "\n",
       "Risk Profile Lot: ", RISK_PROFILE.RP_lot, "\n",
       "Risk Profile Risk: ", RISK_PROFILE.RP_amount, "\n",
       "Risk Profile Hold Time: ", RISK_PROFILE.RP_holdtime, "\n",
       "Risk Profile Order Type: ", RISK_PROFILE.RP_order_type, "\n",
       "Risk Profile Timeframe: ", RISK_PROFILE.RP_timeframe, "\n",
       "True Lot: ", true_lot, "\n",
-      "True Risk: ", interval_trade.true_risk, "\n",
+      "True Risk: ", interval_trade.TRUE_RISK(), "\n",
       "Allocation: ", InpAllocation, "\n",
       "EA Positions: ", interval_trade.NumActivePositions(), "\n",
       "Entry Hour: ", InpEntryHour, "\n",
