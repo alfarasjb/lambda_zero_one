@@ -64,12 +64,12 @@ class CIntervalTrade{
 
    protected:
    private:
+      
+      
+   public: 
       // TRADE PARAMETERS
       float       order_lot;
       double      entry_price, sl_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot;
-      
-   public: 
-      
       
       CIntervalTrade();
       ~CIntervalTrade(){};

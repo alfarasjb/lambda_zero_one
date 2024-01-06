@@ -139,3 +139,15 @@ input bool              InpTerminalMsg    = true; // TERMINAL LOGGING - Enables/
 
 // ========== INPUTS ========== //
 
+
+// ========== UI ========== //
+
+int   UI_X        = 5;
+int   UI_Y        = 400;
+int   UI_WIDTH    = 235;
+int   UI_HEIGHT   = 300; 
+
+string   UI_FONT     = "Segoe UI Semibold";
+string   UI_FONT_BOLD   = "Segoe UI Bold";
+int   FONT_SIZE = 8;
+color DEF_FONT_COLOR = clrWhite;
