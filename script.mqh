@@ -4,9 +4,10 @@
 #include <B63/Generic.mqh>
 
 #include "trade_mt4.mqh"
-
+#include "app.mqh"
 
 CIntervalTrade interval_trade;
+CIntervalApp interval_app(interval_trade, UI_X, UI_Y, UI_WIDTH, UI_HEIGHT);
 
 
 
@@ -22,7 +23,10 @@ int OnInit()
    
    interval_trade.OrdersEA();
    interval_trade.SetNextTradeWindow();
-   create_comments();
+   interval_app.InitializeUIElements();
+   // DRAW UI HERE
+   
+   
    // add provision to check for open orders, in case ea gets deactivated
    //Print("interval_trade.risk_amount: ", interval_trade.risk_amount);
 //---
@@ -35,13 +39,14 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
-   
+   ObjectsDeleteAll(0, 0, -1);
   }
   
   
 void OnTick()
   {
-   if (IsNewCandle() && interval_trade.CorrectPeriod()){
+   if (IsNewCandle() && interval_trade.CorrectPeriod() && interval_trade.MinimumEquity()){
+      // CONDITION 1: New interval, Correct Timeframe, Minimum Equity Requirements.
       // check here for time interval 
       if (interval_trade.ValidTradeOpen()){
          // time is in between open and close time 
@@ -69,37 +74,8 @@ void OnTick()
       
       if (interval_trade.IsNewDay()) { interval_trade.ClearOrdersToday(); }
       interval_trade.ModifyOrder();
-      create_comments();
+      interval_app.InitializeUIElements();
    }
   }
 //+------------------------------------------------------------------+
-
-void create_comments(){
-   double true_lot = interval_trade.CalcLot();
-   double true_risk = InpRiskAmount * InpAllocation;
-   int ea_positions = ArraySize(TRADES_ACTIVE.active_positions);
-   Comment(
-      "Symbol Tick Value: ", interval_trade.TICK_VALUE(), "\n",
-      "Symbol Trade Points: ", interval_trade.TRADE_POINTS(), "\n",
-      "Risk Profile Lot: ", RISK_PROFILE.RP_lot, "\n",
-      "Risk Profile Risk: ", RISK_PROFILE.RP_amount, "\n",
-      "Risk Profile Hold Time: ", RISK_PROFILE.RP_holdtime, "\n",
-      "Risk Profile Order Type: ", RISK_PROFILE.RP_order_type, "\n",
-      "Risk Profile Timeframe: ", RISK_PROFILE.RP_timeframe, "\n",
-      "True Lot: ", true_lot, "\n",
-      "True Risk: ", interval_trade.TRUE_RISK(), "\n",
-      "Allocation: ", InpAllocation, "\n",
-      "EA Positions: ", interval_trade.NumActivePositions(), "\n",
-      "Entry Hour: ", InpEntryHour, "\n",
-      "Entry Minute: ", InpEntryMin, "\n",
-      "Magic: ", InpMagic, "\n",
-      "Last Recorded Time: ", TimeCurrent(), "\n",
-      "Current Trade Entry: ", TRADE_QUEUE.curr_trade_open, "\n",
-      "Current Trade Close: ", TRADE_QUEUE.curr_trade_close, "\n",
-      "Next Trade Entry: ", TRADE_QUEUE.next_trade_open, "\n",
-      "Next Trade Close: ", TRADE_QUEUE.next_trade_close, "\n",
-      "Active Position Entry Time: ", TRADES_ACTIVE.trade_open_datetime, "\n",
-      "Active Position Close Time: ", TRADES_ACTIVE.trade_close_datetime, "\n"
-   );
-}
 

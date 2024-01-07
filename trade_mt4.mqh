@@ -64,12 +64,12 @@ class CIntervalTrade{
 
    protected:
    private:
+      
+      
+   public: 
       // TRADE PARAMETERS
       float       order_lot;
       double      entry_price, sl_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot;
-      
-   public: 
-      
       
       CIntervalTrade();
       ~CIntervalTrade(){};
@@ -127,6 +127,7 @@ class CIntervalTrade{
       void              CheckOrderDeadline();
       bool              CorrectPeriod();
       bool              ValidTradeOpen();
+      bool              MinimumEquity();
       
       // TRADE OPERATIONS
       
@@ -234,7 +235,7 @@ void CIntervalTrade::TradeParamsShort(string trade_type){
    if (trade_type == "market") entry_price = util_price_bid();
    if (trade_type == "pending") entry_price = util_last_candle_open();
    
-   sl_price = entry_price - ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points)));
+   sl_price = entry_price + ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points)));
 }
 
 void CIntervalTrade::GetTradeParams(string trade_type){
@@ -783,7 +784,6 @@ int CIntervalTrade::SendMarketOrder(void){
    if (util_market_spread() > RISK_PROFILE.RP_spread) { UpdateCSV("delayed"); }
    
    
-   
    switch (InpSpreadMgt){
    
       case Interval: // interval 
@@ -796,6 +796,7 @@ int CIntervalTrade::SendMarketOrder(void){
       
          while (util_market_spread() >= RISK_PROFILE.RP_spread || !DelayedAndValid()){
             Sleep(delay);
+            
             if (TimeCurrent() >= TRADE_QUEUE.curr_trade_close) return -1;
          }
          break;
@@ -891,6 +892,25 @@ bool CIntervalTrade::UpdateCSV(string log_type){
    return true;
 }
 
+bool CIntervalTrade::MinimumEquity(void){
+   
+   /*
+   Boolean validation for checking if current account equity meets minimum trading requirements. 
+   
+   Returns TRUE if account_equity > InpMinimumEquity
+   Returns FALSE if account_equity is below minimum requirement. 
+   */
+
+   double account_equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   
+   
+   if (account_equity < InpMinimumEquity) {
+      logger(StringFormat("TRADING DISABLED. Account Equity is below Minimum Trading Requirement. Current Equity: %f, Required: %f", account_equity, InpMinimumEquity));
+      return false;
+   }
+   
+   return true;
+}
 
 // ------------------------------- MAIN ------------------------------- //
 
