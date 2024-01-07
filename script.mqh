@@ -45,7 +45,8 @@ void OnDeinit(const int reason)
   
 void OnTick()
   {
-   if (IsNewCandle() && interval_trade.CorrectPeriod()){
+   if (IsNewCandle() && interval_trade.CorrectPeriod() && interval_trade.MinimumEquity()){
+      // CONDITION 1: New interval, Correct Timeframe, Minimum Equity Requirements.
       // check here for time interval 
       if (interval_trade.ValidTradeOpen()){
          // time is in between open and close time 

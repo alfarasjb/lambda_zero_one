@@ -125,6 +125,7 @@ input float             InpRiskAmount     = 1000; // RISK AMOUNT - Scales lot to
 input float             InpAllocation     = 1; // ALLOCATION - Percentage of Total Risk
 input TradeManagement   InpTradeMgt       = None; // TRADE MANAGEMENT - BE / Trail Stop
 input float             InpTrailInterval  = 50; // TRAIL STOP INTERVAL - Trail Points Increment
+input float             InpMinimumEquity  = 1000; // MINIMUM EQUITY - Minimum required equity to enable trading.
 
 
 input string            InpMisc           = "========== MISC =========="; // ========== MISC ==========
@@ -149,5 +150,5 @@ int   UI_HEIGHT   = 300;
 
 string   UI_FONT     = "Segoe UI Semibold";
 string   UI_FONT_BOLD   = "Segoe UI Bold";
-int   FONT_SIZE = 8;
+int   DEF_FONT_SIZE = 8;
 color DEF_FONT_COLOR = clrWhite;

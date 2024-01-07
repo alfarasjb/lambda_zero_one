@@ -29,7 +29,7 @@ CIntervalApp::CIntervalApp(CIntervalTrade &trade, int ui_x, int ui_y, int ui_wid
    
    DefFontStyle = UI_FONT;
    DefFontStyleBold = UI_FONT_BOLD;
-   DefFontSize = FONT_SIZE;
+   DefFontSize = DEF_FONT_SIZE;
    
    APP_ROW_1 = UI_Y - 20;
    
