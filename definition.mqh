@@ -126,7 +126,7 @@ input float             InpAllocation     = 1; // ALLOCATION - Percentage of Tot
 input TradeManagement   InpTradeMgt       = None; // TRADE MANAGEMENT - BE / Trail Stop
 input float             InpTrailInterval  = 50; // TRAIL STOP INTERVAL - Trail Points Increment
 input float             InpMinimumEquity  = 1000; // MINIMUM EQUITY - Minimum required equity to enable trading.
-
+input float             InpMaxLot         = 1; // MAX LOT - Maximum Allowable Lot 
 
 input string            InpMisc           = "========== MISC =========="; // ========== MISC ==========
 input SpreadManagement  InpSpreadMgt      = Recursive; // SPREAD MANAGEMENT
@@ -144,7 +144,7 @@ input bool              InpTerminalMsg    = true; // TERMINAL LOGGING - Enables/
 // ========== UI ========== //
 
 int   UI_X        = 5;
-int   UI_Y        = 400;
+int   UI_Y        = 450;
 int   UI_WIDTH    = 235;
 int   UI_HEIGHT   = 300; 
 

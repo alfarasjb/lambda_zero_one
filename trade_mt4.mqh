@@ -207,7 +207,10 @@ double CIntervalTrade::CalcLot(){
    true_risk = InpAllocation * InpRiskAmount; 
    
    double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor;
+   scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
+   
    true_lot = scaled_lot;
+   
    
    return scaled_lot;
 }
