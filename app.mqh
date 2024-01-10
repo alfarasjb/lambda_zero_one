@@ -65,6 +65,8 @@ void CIntervalApp::InitializeUIElements(void){
    DrawRow("Active Close", 21, TimeToString(TRADES_ACTIVE.trade_close_datetime));
    DrawRow("Min Equity", 22, InpMinimumEquity);
    DrawRow("Max Lot", 23, InpMaxLot);
+   DrawRow("Initial Deposit", 24, TRADE.account_deposit());
+   DrawRow("Sizing", 25, EnumToString(InpSizing));
    
    
 

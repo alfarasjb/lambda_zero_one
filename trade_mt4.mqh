@@ -168,6 +168,7 @@ class CIntervalTrade{
       
       double            account_balance();
       string            account_server();
+      double            account_deposit();
       
       int               logger(string message);
       void              errors(string error_message);
@@ -206,8 +207,18 @@ double CIntervalTrade::CalcLot(){
    double risk_amount_scale_factor = InpRiskAmount / RISK_PROFILE.RP_amount;
    true_risk = InpAllocation * InpRiskAmount; 
    
-   double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor;
+   
+   // equity scaling adjusts lot size based on current equity over initial investment. 
+   double deposit = account_deposit();
+   
+   // WARNING: 100000 is a dummy value. use for strategy tester only.
+   deposit = deposit == -1 ? 100000 : deposit;
+   
+   double equity_scaling = InpSizing == Dynamic ? account_balance() / deposit : 1; 
+   
+   double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling;
    scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
+   
    
    true_lot = scaled_lot;
    
@@ -1025,7 +1036,7 @@ int CIntervalTrade::OP_OrderOpen(
    */
 
    logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
-   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, 0, EA_ID, InpMagic, 0, clrNONE);
+   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, 0, (string)InpMagic, InpMagic, 0, clrNONE);
    return ticket;
 }
 
@@ -1329,12 +1340,26 @@ double   CIntervalTrade::util_price_bid(void)         { return SymbolInfoDouble(
 double   CIntervalTrade::util_last_candle_open(void)  { return iOpen(Symbol(), PERIOD_CURRENT, 0); }
 double   CIntervalTrade::util_last_candle_close(void) { return iClose(Symbol(), PERIOD_CURRENT, 0); }
 
-double   CIntervalTrade::account_balance(void)        { return AccountInfoDouble(ACCOUNT_BALANCE); }
-string   CIntervalTrade::account_server(void)         { return AccountInfoString(ACCOUNT_SERVER); }
-
 int      CIntervalTrade::util_interval_day(void)      { return PeriodSeconds(PERIOD_D1); }
 int      CIntervalTrade::util_interval_current(void)  { return PeriodSeconds(PERIOD_CURRENT); }
 
+double   CIntervalTrade::account_balance(void)        { return AccountInfoDouble(ACCOUNT_BALANCE); }
+string   CIntervalTrade::account_server(void)         { return AccountInfoString(ACCOUNT_SERVER); }
+
+double   CIntervalTrade::account_deposit(void) {
+   /*
+   Returns initial deposit by iterating through history. 
+   
+   Deposit is the last entry, hence the loop is decrementing. 
+   */
+   int num_history = OrdersHistoryTotal();
+   
+   for (int i = num_history; i >= 0; i--){
+      int s = OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
+      if (OrderType() == 6) return OrderProfit();
+   }
+   return -1; 
+}
 // ------------------------------- UTILS AND WRAPPERS ------------------------------- //
 
 

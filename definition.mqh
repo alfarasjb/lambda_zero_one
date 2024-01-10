@@ -18,6 +18,11 @@ enum TradeManagement{
    None
 };
 
+enum PositionSizing{
+   Dynamic,
+   Static,
+};
+
 /*
 INPUTS:
 -------
@@ -92,6 +97,18 @@ MAX LOT:
    
    Safeguard. Prevents entering trades with disproportionate lot-account size. 
    
+INITIAL DEPOSIT: 
+   Initial Deposit 
+   
+   Used for measuring equity scaling for dynamic sizing 
+   
+POSITION SIZING:
+   Mode for position sizing
+   
+   Static - uses base calculated size 
+   Dynamic - scales size based on ratio of equity over initial deposit. 
+   
+   
 // ===== MISC ===== // 
 SPREAD MANAGEMENT:
    Technique for handling bad spreads. 
@@ -136,6 +153,7 @@ input TradeManagement   InpTradeMgt       = None; // TRADE MANAGEMENT - BE / Tra
 input float             InpTrailInterval  = 50; // TRAIL STOP INTERVAL - Trail Points Increment
 input float             InpMinimumEquity  = 1000; // MINIMUM EQUITY - Minimum required equity to enable trading.
 input float             InpMaxLot         = 1; // MAX LOT - Maximum Allowable Lot 
+input PositionSizing    InpSizing         = Dynamic; // POSITION SIZING - Position Sizing
 
 input string            InpMisc           = "========== MISC =========="; // ========== MISC ==========
 input SpreadManagement  InpSpreadMgt      = Recursive; // SPREAD MANAGEMENT
@@ -153,7 +171,7 @@ input bool              InpTerminalMsg    = true; // TERMINAL LOGGING - Enables/
 // ========== UI ========== //
 
 int   UI_X        = 5;
-int   UI_Y        = 450;
+int   UI_Y        = 480;
 int   UI_WIDTH    = 235;
 int   UI_HEIGHT   = 300; 
 
