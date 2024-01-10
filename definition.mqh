@@ -82,7 +82,16 @@ TRADE MANAGEMENT:
       2. Trailing -> Updates trail stop until hit by market price. Manually closes trade if in floating loss.
       3. None -> Closes at deadline.
       
-      
+MINIMUM EQUITY:
+   Minimum equity required to open a trade. 
+   
+   Safeguard. Prevents severe drawdown. 
+   
+MAX LOT: 
+   Maximum Allowable lot size. 
+   
+   Safeguard. Prevents entering trades with disproportionate lot-account size. 
+   
 // ===== MISC ===== // 
 SPREAD MANAGEMENT:
    Technique for handling bad spreads. 
@@ -152,3 +161,7 @@ string   UI_FONT     = "Segoe UI Semibold";
 string   UI_FONT_BOLD   = "Segoe UI Bold";
 int   DEF_FONT_SIZE = 8;
 color DEF_FONT_COLOR = clrWhite;
+
+// Syntax: <Abbreviation>-<Date Deployed>-<Base Version>
+// DO NOT CHANGE
+const string EA_ID = "LZO-010124-2";
