@@ -1025,7 +1025,7 @@ int CIntervalTrade::OP_OrderOpen(
    */
 
    logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
-   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, 0, (string)InpMagic, InpMagic, 0, clrNONE);
+   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, 0, EA_ID, InpMagic, 0, clrNONE);
    return ticket;
 }
 
