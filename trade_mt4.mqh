@@ -209,7 +209,12 @@ double CIntervalTrade::CalcLot(){
    
    
    // equity scaling adjusts lot size based on current equity over initial investment. 
-   double equity_scaling = InpSizing == Dynamic ? account_balance() / account_deposit() : 1; 
+   double deposit = account_deposit();
+   
+   // WARNING: 100000 is a dummy value. use for strategy tester only.
+   deposit = deposit == -1 ? 100000 : deposit;
+   
+   double equity_scaling = InpSizing == Dynamic ? account_balance() / deposit : 1; 
    
    double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling;
    scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
