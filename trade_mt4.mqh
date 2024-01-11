@@ -1073,6 +1073,21 @@ int CIntervalTrade::OP_ModifySL(double sl){
    return m;
 }
 
+double   CIntervalTrade::account_deposit(void) {
+   /*
+   Returns initial deposit by iterating through history. 
+   
+   Deposit is the last entry, hence the loop is decrementing. 
+   */
+   int num_history = OrdersHistoryTotal();
+   
+   for (int i = num_history; i >= 0; i--){
+      int s = OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
+      if (OrderType() == 6) return OrderProfit();
+   }
+   return -1; 
+}
+
 #endif
 
 // ------------------------------- MQL4 ------------------------------- //
@@ -1228,6 +1243,22 @@ int CIntervalTrade::OP_ModifySL(double sl){
    return m;
 }
 
+double CIntervalTrade::account_deposit(void){
+   HistorySelect(0, TimeCurrent());
+   
+   uint total = HistoryDealsTotal();
+   
+   for (int i = 0; i < total; i++){
+      ulong ticket = HistoryDealGetTicket(i);
+      uint type = HistoryDealGetInteger(ticket, DEAL_TYPE);
+      double deposit = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+      
+      if (type == 2) return deposit; 
+   }
+   return -1;
+}
+
+
 #endif 
 
 // ------------------------------- MQL5 ------------------------------- //
@@ -1346,20 +1377,7 @@ int      CIntervalTrade::util_interval_current(void)  { return PeriodSeconds(PER
 double   CIntervalTrade::account_balance(void)        { return AccountInfoDouble(ACCOUNT_BALANCE); }
 string   CIntervalTrade::account_server(void)         { return AccountInfoString(ACCOUNT_SERVER); }
 
-double   CIntervalTrade::account_deposit(void) {
-   /*
-   Returns initial deposit by iterating through history. 
-   
-   Deposit is the last entry, hence the loop is decrementing. 
-   */
-   int num_history = OrdersHistoryTotal();
-   
-   for (int i = num_history; i >= 0; i--){
-      int s = OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
-      if (OrderType() == 6) return OrderProfit();
-   }
-   return -1; 
-}
+
 // ------------------------------- UTILS AND WRAPPERS ------------------------------- //
 
 
