@@ -23,6 +23,12 @@ enum PositionSizing{
    Static,
 };
 
+enum AccountType{
+   Personal, 
+   Challenge,
+   Funded,
+};
+
 /*
 INPUTS:
 -------
@@ -59,7 +65,7 @@ ENTRY WINDOW MINUTE:
    Entry Time (Minute)
    
 // ===== RISK MANAGEMENT ===== // 
-RISK AMOUNT:
+BASE RISK AMOUNT:
    Overall Aggregated Risk Amount (Overall loss if basket fails)
    
    User Defined. 
@@ -67,6 +73,14 @@ RISK AMOUNT:
    Scales True Risk Amount from Risk Profile to match this. 
    
    Scales True Lot Size based on Risk Amount
+   
+   Live - Base Risk 
+   Challenge - Base * Chall Scale 
+   Live Funded - Base * Live Scale
+   
+   Recommended: 
+      Chall Scale = 2.5
+      Live Funded = 0.5
    
 ALLOCATION: 
    Percentage of overall RISK AMOUNT to allocate to this instrument. 
@@ -107,7 +121,59 @@ POSITION SIZING:
    
    Static - uses base calculated size 
    Dynamic - scales size based on ratio of equity over initial deposit. 
+  
+DRAWDOWN SCALING: 
+   Factor for sizing down position size when account balance is below drawdown threshold. 
+
+ABSOLUTE DRAWDOWN THRESHOLD
+   Maximum Absolute Drawdown as percentage of initial deposit that triggers drawdown scaling 
+   if account balance breaches dd equity. 
    
+   Ex. 
+   ADT = 10%
+   Deposit = 100000 
+   Floor = 1 - (Deposit * (ADT / 100))
+   
+   If balance < Floor -> SIZE DOWN 
+
+// ===== FUNDED ===== // 
+
+PROFIT TARGET 
+   Profit target as a percent of initial deposit. 
+   
+   
+CHALLENGE ACCOUNT SCALING 
+   Lot scaling for challenge account until profit target is reached
+  
+   Recommended = 2.5 
+   
+   
+CHALLENGE ACCOUNT DRAWDOWN SCALING 
+   Lot scaling for challenge account if balance breaches prop absolute drawdown threshold 
+   
+   Recommended = 1
+   
+   
+LIVE ACCOUNT SCALING 
+   Lot scaling for live funded account. Preferred conservative sizing to preserve account. 
+   
+   Recommended = 0.5
+   
+
+LIVE ACCOUNT DRAWDOWN SCALING 
+   Lot scaling for live funded account if balance breaches prop absolute drawdown threshold 
+   
+   Recommended = 0.25 
+   
+MIN TARGET POINTS 
+   Minimum Take Profit points allowed. Used for challenge accounts where profit target is not yet reached. 
+   
+   Recommended = 50 
+
+
+PROP ABSOLUTE DRAWDOWN THRESHOLD
+   Maximum Absolute Drawdown as percentage of initial deposit that triggers drawdown scaling 
+   if account balance breaches dd equity.
    
 // ===== MISC ===== // 
 SPREAD MANAGEMENT:
@@ -147,13 +213,25 @@ input int               InpEntryHour      = 1; // ENTRY WINDOW HOUR
 input int               InpEntryMin       = 0; // ENTRY WINDOW MINUTE
 
 input string            InpRiskMgt        = "========== RISK MANAGEMENT =========="; // ========== RISK MANAGEMENT ==========
-input float             InpRiskAmount     = 1000; // RISK AMOUNT - Scales lot to match risk amount (10 lots / 1000USD)
+input AccountType       InpAccountType    = Personal; // ACCOUNT TYPE - Account Type
+input float             InpRiskAmount     = 1000; // BASE RISK AMOUNT - Scales lot to match risk amount (10 lots / 1000USD) 
 input float             InpAllocation     = 1; // ALLOCATION - Percentage of Total Risk
 input TradeManagement   InpTradeMgt       = None; // TRADE MANAGEMENT - BE / Trail Stop
 input float             InpTrailInterval  = 50; // TRAIL STOP INTERVAL - Trail Points Increment
 input float             InpMinimumEquity  = 1000; // MINIMUM EQUITY - Minimum required equity to enable trading.
 input float             InpMaxLot         = 1; // MAX LOT - Maximum Allowable Lot 
 input PositionSizing    InpSizing         = Dynamic; // POSITION SIZING - Position Sizing
+input float             InpDDScale        = 0.5; // DRAWDOWN SCALING
+input float             InpAbsDDThresh    = 10; // ABSOLUTE DRAWDOWN THRESHOLD
+
+input string            InpFunded         = "========== FUNDED =========="; // ========== FUNDED ==========
+input float             InpProfitTarget   = 10; // PROFIT TARGET 
+input float             InpChallScale     = 2.5; // CHALLENGE ACCOUNT SCALING
+input float             InpChallDDScale   = 1; // CHALLENGE ACCOUNT DRAWDOWN SCALING 
+input float             InpLiveScale      = 0.5; // LIVE ACCOUNT SCALING
+input float             InpLiveDDScale    = 0.25; // LIVE ACCOUNT DRAWDOWN SCALING
+input float             InpMinTargetPts   = 50; // MIN TP POINTS
+input float             InpPropDDThresh  = 5; // CHALLENGE ACCOUNT DRAWDOWN THRESHOLD 
 
 input string            InpMisc           = "========== MISC =========="; // ========== MISC ==========
 input SpreadManagement  InpSpreadMgt      = Recursive; // SPREAD MANAGEMENT
@@ -165,8 +243,13 @@ input string            InpLog            = "========== LOGGING =========="; // 
 input bool              InpLogging        = true; // CSV LOGGING - Enables/Disables Trade Logging
 input bool              InpTerminalMsg    = true; // TERMINAL LOGGING - Enables/Disables Terminal Logging
 
+input string            InpBacktest       = "========== BACKTEST =========="; // ========== BACKTEST ==========
+input double            InpDummyDeposit   = 100000; // BACKTEST DUMMY DEPOSIT - For strategy tester
 // ========== INPUTS ========== //
+/*
 
+
+*/
 
 // ========== UI ========== //
 

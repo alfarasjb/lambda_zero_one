@@ -69,13 +69,17 @@ class CIntervalTrade{
    public: 
       // TRADE PARAMETERS
       float       order_lot;
-      double      entry_price, sl_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot;
+      double      entry_price, sl_price, tp_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot, ACCOUNT_DEPOSIT;
+      
+      // FUNDED 
+      double      funded_target_equity, funded_target_usd; 
       
       CIntervalTrade();
       ~CIntervalTrade(){};
       
       // INIT 
       void              SetRiskProfile();
+      void              SetFundedProfile();
       double            CalcLot();
       
       // ENCAPSULATION
@@ -129,6 +133,15 @@ class CIntervalTrade{
       bool              ValidTradeOpen();
       bool              MinimumEquity();
       
+      // FUNDED
+      float             RiskScaling();
+      double            CalcTP();
+      double            CalcTradePoints(double target_amount);
+      bool              ProfitTargetReached();
+      bool              EvaluationPhase();
+      bool              BelowAbsoluteDrawdownThreshold();
+      bool              EquityReachedProfitTarget();
+      
       // TRADE OPERATIONS
       
       int               PosTotal();
@@ -167,6 +180,7 @@ class CIntervalTrade{
       int               util_is_pending(ENUM_ORDER_TYPE ord_type);
       
       double            account_balance();
+      double            account_equity();
       string            account_server();
       double            account_deposit();
       
@@ -182,9 +196,163 @@ CIntervalTrade::CIntervalTrade(void){
    tick_value = util_tick_val();
    trade_points = util_trade_pts();
    
+   ACCOUNT_DEPOSIT = account_deposit();
    TRADES_ACTIVE.candle_counter = 0;
    TRADES_ACTIVE.orders_today = 0;
 }
+
+
+
+// ------------------------------- FUNDED ------------------------------- //
+
+
+/*
+FUNDED NOTES: 
+
+Scale Lot and risk until target equity is reached, then normalize (1). 
+Calculate TP until target equity is reached, then normalize (0)
+
+SAFEGUARD CHALLENGE DRAWDOWN Size Down to 1 
+
+** USE TRAILING STOP 
+*/
+void CIntervalTrade::SetFundedProfile(void){
+
+   funded_target_usd = ACCOUNT_DEPOSIT * (InpProfitTarget / 100);
+   funded_target_equity = ACCOUNT_DEPOSIT + funded_target_usd;
+}
+
+
+float CIntervalTrade::RiskScaling(void){
+   /*
+   Scales lot size based on account type and drawdown rules.
+   
+   Personal Account: 
+      DD Scale = 0.5 
+      Default = 1;
+      
+   Challenge: 
+      ProfitTargetReached = Live
+      DD Scale = Input (ChallDDScale)
+      Default = Challenge (Input)
+      
+   Funded:
+      DD Scale = Input (ChallDDScale)
+      Default = Live
+      
+   */
+   switch(InpAccountType){
+      case Personal: 
+         if (BelowAbsoluteDrawdownThreshold()) return InpDDScale;
+         return 1; 
+         break;
+         
+      case Challenge:
+         if (ProfitTargetReached()) return InpLiveScale; 
+         if (BelowAbsoluteDrawdownThreshold()) return InpChallDDScale;
+         return InpChallScale;
+         break;
+         
+      case Funded:
+         if (BelowAbsoluteDrawdownThreshold()) return InpLiveDDScale; 
+         return InpLiveScale;
+         break;
+         
+      default: 
+         return 1; 
+         break;
+   }
+}
+
+
+double CIntervalTrade::CalcTP(void){
+   /*
+   Calculates TP Points. 
+   
+   Used with challenge account, sets a take profit needed to achieve profit target. 
+   */
+   
+   double current_account_profit = account_balance() - ACCOUNT_DEPOSIT; 
+   double remaining_profit_target = funded_target_usd - current_account_profit;
+   
+   
+   
+   double take_profit_points = (remaining_profit_target) / (CalcLot() * tick_value * (1 / trade_points)); 
+   double points = take_profit_points / trade_points;
+   
+   double tp = entry_price + take_profit_points;
+   
+   if (points < InpMinTargetPts) return (InpMinTargetPts * trade_points);
+  
+   
+   return take_profit_points;   
+}
+
+
+
+bool CIntervalTrade::ProfitTargetReached(void){
+   /*
+   Boolean validtion for checking if account balance is below target equity.
+   
+   Returns false if profit target is not yet reached. 
+   True if otherwise
+   */
+   if (account_balance() < funded_target_equity) return false; 
+   return true; 
+}
+
+bool CIntervalTrade::EvaluationPhase(void){
+   /*
+   Boolean validation for checking if account is still in evaluation phase (below target equity.)
+   */
+   if (InpAccountType == Challenge && !ProfitTargetReached()) return true;
+   return false;
+}
+
+bool CIntervalTrade::BelowAbsoluteDrawdownThreshold(void){
+   /*
+   Boolean Validation. Checks if current balance is below threshold of drawdown. 
+   
+   If current balance is below drawdown threshold, algo must size down. 
+   
+   Returns true if current balance is below threshold. 
+   False if otherwise. 
+   
+   Example: 
+   Chall Thresh - 5% 
+   deposit = 100000 
+   threshold = 95000 
+   balance = 98000 -> false 
+   balance = 93000 -> false
+   
+   Safeguard for Challenge MaxDD
+   */
+   
+   double threshold = InpAccountType == Personal ? InpAbsDDThresh : InpPropDDThresh; 
+  
+   
+   double equity_threshold = ACCOUNT_DEPOSIT * (1 - (threshold / 100));
+   
+   if (account_balance() < equity_threshold) return true; 
+   return false;
+}
+
+bool CIntervalTrade::EquityReachedProfitTarget(void){
+   /*
+   Boolean validation for checking if account equity has reached profit target. 
+   
+   Difference with ProfitTargetReached is that this method is called on tick instead of 
+   per trade. 
+   
+   Used for manually closing if equity ticks above target equity. 
+   */
+   
+   if ((account_equity() >= funded_target_equity) && (account_balance() < funded_target_equity)) return true; 
+   return false;
+}
+
+// ------------------------------- FUNDED ------------------------------- //
+
 
 // ------------------------------- INIT ------------------------------- //
 
@@ -203,20 +371,35 @@ void CIntervalTrade::SetRiskProfile(void){
 double CIntervalTrade::CalcLot(){
    /*
    Calculates lot size based on scale factor, risk amount, percentage basket allocation
+   
+   Risk Profile Scaling - scales overall risk amount based on account size. (dependent on risk profile created by optimization on python 
+   using tradetestlib.)
+   
+   Equity scaling creates a multiplier that adjusts lot size base on current equity over initial investment. 
+   Disabled if account is in evaluation phase (Account Type is challenge and balance below target equity.)
+   
+   Ex.
+   Deposit = 100000
+   Current = 110000
+   
+   equity_scaling = 1.1 
+   
+   Risk Scaling - scales lot size based on account type and drawdown rules defined in RiskScaling();
    */
+   
+   // RISK PROFILE SCALING
    double risk_amount_scale_factor = InpRiskAmount / RISK_PROFILE.RP_amount;
    true_risk = InpAllocation * InpRiskAmount; 
    
+   // EQUITY SCALING
+   double equity_scaling = !EvaluationPhase() ? InpSizing == Dynamic ? account_balance() / ACCOUNT_DEPOSIT : 1 : 1; 
    
-   // equity scaling adjusts lot size based on current equity over initial investment. 
-   double deposit = account_deposit();
+   // RISK SCALING 
+   double risk_scaling = RiskScaling();
    
-   // WARNING: 100000 is a dummy value. use for strategy tester only.
-   deposit = deposit == -1 ? 100000 : deposit;
+   double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling * risk_scaling;
    
-   double equity_scaling = InpSizing == Dynamic ? account_balance() / deposit : 1; 
-   
-   double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling;
+   // Clipping. Prevents over sizing.
    scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
    
    
@@ -240,6 +423,10 @@ void CIntervalTrade::TradeParamsLong(string trade_type){
    if (trade_type == "pending") entry_price = util_last_candle_open();
    
    sl_price = entry_price - ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points)));
+   
+   
+   // SET TP PRICE ONLY IF CHALLENGE, AND BELOW TARGET EQUITY 
+   tp_price = EvaluationPhase() ? (entry_price + CalcTP()) : 0; 
 }
 
 void CIntervalTrade::TradeParamsShort(string trade_type){
@@ -250,6 +437,9 @@ void CIntervalTrade::TradeParamsShort(string trade_type){
    if (trade_type == "pending") entry_price = util_last_candle_open();
    
    sl_price = entry_price + ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points)));
+
+   tp_price = EvaluationPhase() ? (entry_price - CalcTP()) : 0;
+
 }
 
 void CIntervalTrade::GetTradeParams(string trade_type){
@@ -572,7 +762,11 @@ void CIntervalTrade::CheckOrderDeadline(void){
    trade is requested to close.
    
    Redundancy in case close_order() fails.
+   
    */
+   
+   
+   //if (InpAccountType == Challenge && !EquityReachedProfitTarget() && InpTradeMgt == Trailing) return;
    
    int active = NumActivePositions();
    
@@ -828,7 +1022,7 @@ int CIntervalTrade::SendMarketOrder(void){
    
    
    
-   int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), entry_price, sl_price, 0);
+   int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), entry_price, sl_price, tp_price);
    if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()));
    SetTradeOpenDatetime(TimeCurrent(), ticket);
    
@@ -1036,7 +1230,7 @@ int CIntervalTrade::OP_OrderOpen(
    */
 
    logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
-   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, 0, (string)InpMagic, InpMagic, 0, clrNONE);
+   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, tp_price, (string)InpMagic, InpMagic, 0, clrNONE);
    return ticket;
 }
 
@@ -1085,7 +1279,8 @@ double   CIntervalTrade::account_deposit(void) {
       int s = OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
       if (OrderType() == 6) return OrderProfit();
    }
-   return -1; 
+   logger("Deposit not found. Using Dummy.");
+   return InpDummyDeposit; 
 }
 
 #endif
@@ -1255,7 +1450,8 @@ double CIntervalTrade::account_deposit(void){
       
       if (type == 2) return deposit; 
    }
-   return -1;
+   logger("Deposit not found. Using Dummy.");
+   return InpDummyDeposit;
 }
 
 
@@ -1375,6 +1571,7 @@ int      CIntervalTrade::util_interval_day(void)      { return PeriodSeconds(PER
 int      CIntervalTrade::util_interval_current(void)  { return PeriodSeconds(PERIOD_CURRENT); }
 
 double   CIntervalTrade::account_balance(void)        { return AccountInfoDouble(ACCOUNT_BALANCE); }
+double   CIntervalTrade::account_equity(void)         { return AccountInfoDouble(ACCOUNT_EQUITY); }
 string   CIntervalTrade::account_server(void)         { return AccountInfoString(ACCOUNT_SERVER); }
 
 

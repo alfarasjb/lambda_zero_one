@@ -19,6 +19,7 @@ int OnInit()
    Trade.SetExpertMagicNumber(InpMagic);
    #endif 
    interval_trade.SetRiskProfile();
+   interval_trade.SetFundedProfile();
    //set_deadline();
    
    interval_trade.OrdersEA();
@@ -60,8 +61,8 @@ void OnTick()
 
       }
       else{
-         if (TimeCurrent() >= TRADE_QUEUE.curr_trade_close) { interval_trade.CloseOrder(); }
-         
+         if (interval_trade.EquityReachedProfitTarget()) interval_trade.CloseOrder();
+         if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != Trailing)) interval_trade.CloseOrder();         
       }
       // check order here. if order is active, increment
       interval_trade.SetNextTradeWindow();
