@@ -1396,7 +1396,7 @@ int CIntervalTrade::OP_OrderOpen(
    double            sl, 
    double            tp){
    
-   bool t = Trade.PositionOpen(symbol, order_type, volume, price, sl, tp, NULL);
+   bool t = Trade.PositionOpen(symbol, order_type, NormalizeDouble(volume, 2), entry_price, sl_price, tp_price, NULL);
    logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
    if (!t) { Print(GetLastError()); }
    int order_ticket = OP_SelectTicket();
