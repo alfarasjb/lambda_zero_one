@@ -184,8 +184,9 @@ class CIntervalTrade{
       string            account_server();
       double            account_deposit();
       
-      int               logger(string message);
+      int               logger(string message, bool notify = false);
       void              errors(string error_message);
+      bool              notification(string message);
       
 };
 
@@ -487,7 +488,7 @@ void CIntervalTrade::SetDelayedEntry(double price){
    Sets delayed entry reference price when spreads are too wide
    */
    logger(StringFormat("Last Open: %f", util_last_candle_open()));
-   logger(StringFormat("Set Delayed Entry Reference Price: %f, Spread: %f", price, util_market_spread()));
+   logger(StringFormat("Set Delayed Entry Reference Price: %f, Spread: %f", price, util_market_spread()), true);
    delayed_entry_reference = price;
 }
 
@@ -835,7 +836,6 @@ int CIntervalTrade::TrailStop(void){
    /*
    Iterates through active positions, sets trail stop 
    */
-   
    int active = NumActivePositions();
    
    for (int i = 0; i < active; i++){
@@ -878,7 +878,7 @@ int CIntervalTrade::TrailStop(void){
             
       }
       c = OP_ModifySL(updated_sl);
-      if (c) logger("Trail Stop Updated");
+      if (c) logger(StringFormat("Trail Stop Updated. Ticket: %i", ticket), true);
    }
    
    return 1;
@@ -1023,7 +1023,7 @@ int CIntervalTrade::SendMarketOrder(void){
    
    
    int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), entry_price, sl_price, tp_price);
-   if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()));
+   if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()), true);
    SetTradeOpenDatetime(TimeCurrent(), ticket);
    
    ActivePosition ea_pos;
@@ -1191,7 +1191,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
       case ORDER_TYPE_SELL: 
       
          c = OrderClose(OrderTicket(), PosLots(), ClosePrice(), 3);
-         if (!c) logger(StringFormat("ORDER CLOSE FAILED. TICKTE: %i, ERROR: %i", ticket, GetLastError()));
+         if (!c) logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), true);
          break;
          
       case ORDER_TYPE_BUY_LIMIT:
@@ -1212,7 +1212,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    SetOrderCloseLogInfo(ClosePrice(), TimeCurrent(), PosTicket());
    
    if (!UpdateCSV("close")) logger("Failed to write to CSV. Order: CLOSE");
-   if (c) logger(StringFormat("Closed: %i", PosTicket()));
+   if (c) logger(StringFormat("Closed: %i P/L: %f", PosTicket(), PosProfit()), true);
    
    return 1;
 }
@@ -1229,7 +1229,7 @@ int CIntervalTrade::OP_OrderOpen(
    Sends a market order
    */
 
-   logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
+   logger(StringFormat("ORDER OPEN: Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()), true);
    int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, tp_price, (string)InpMagic, InpMagic, 0, clrNONE);
    return ticket;
 }
@@ -1365,7 +1365,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
          // market order
          if (PositionGetDouble(POSITION_PROFIT) > 0 && InpTradeMgt == Trailing) return -2; // ignores open positions in profit when using trail stop 
          c = Trade.PositionClose(ticket); // closes positions in loss when using trail stop 
-         if (!c) { logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()));}
+         if (!c) { logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), true);}
          break;
       case ORDER_TYPE_BUY_LIMIT:
       case ORDER_TYPE_SELL_LIMIT:
@@ -1382,7 +1382,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    SetOrderCloseLogInfo(ClosePrice(), TimeCurrent(), PosTicket());
    
    if (!UpdateCSV("close")) { logger("Failed to write to CSV. Order: CLOSE"); }
-   if (c) { logger(StringFormat("Closed: %i", PosTicket())); }
+   if (c) { logger(StringFormat("Closed: %i P/L", PosTicket(), PosProfit()), true); }
    return c;
 }
 
@@ -1397,7 +1397,7 @@ int CIntervalTrade::OP_OrderOpen(
    double            tp){
    
    bool t = Trade.PositionOpen(symbol, order_type, NormalizeDouble(volume, 2), entry_price, sl_price, tp_price, NULL);
-   logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
+   logger(StringFormat("ORDER OPEN: Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl_price, tp_price, util_market_spread()), true);
    if (!t) { Print(GetLastError()); }
    int order_ticket = OP_SelectTicket();
    return order_ticket;
@@ -1553,10 +1553,26 @@ double CIntervalTrade::util_delayed_entry_reference(void){
    return reference;
 }
 
-int CIntervalTrade::logger(string message){
+int CIntervalTrade::logger(string message, bool notify = false){
    if (!InpTerminalMsg) return -1;
    Print("LOGGER: ", message);
+   
+   if (notify) notification(message);
+   
    return 1;
+}
+
+bool CIntervalTrade::notification(string message){
+   /*
+   Sends notification to MT4/MT5 App on Trade Open, Close, Modify
+   */
+   // CONSTRUCT MESSAGE 
+   
+   
+   bool n = SendNotification(message);
+   
+   if (!n) logger(StringFormat("Failed to Send Notification. Code: %i", GetLastError()));
+   return n;
 }
 
 void CIntervalTrade::errors(string error_message)     { Print("ERROR: ", error_message); }

@@ -28,6 +28,7 @@ int OnInit()
    // DRAW UI HERE
    
    
+   
    // add provision to check for open orders, in case ea gets deactivated
    //Print("interval_trade.risk_amount: ", interval_trade.risk_amount);
 //---
@@ -74,8 +75,9 @@ void OnTick()
       }
       
       if (interval_trade.IsNewDay()) { interval_trade.ClearOrdersToday(); }
-      interval_trade.ModifyOrder();
+      
       interval_app.InitializeUIElements();
    }
+   interval_trade.ModifyOrder();
   }
 //+------------------------------------------------------------------+
