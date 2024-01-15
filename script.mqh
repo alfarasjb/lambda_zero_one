@@ -19,6 +19,7 @@ int OnInit()
    Trade.SetExpertMagicNumber(InpMagic);
    #endif 
    interval_trade.SetRiskProfile();
+   interval_trade.SetFundedProfile();
    //set_deadline();
    
    interval_trade.OrdersEA();
@@ -60,8 +61,14 @@ void OnTick()
 
       }
       else{
-         if (TimeCurrent() >= TRADE_QUEUE.curr_trade_close) { interval_trade.CloseOrder(); }
-         
+         if (interval_trade.EquityReachedProfitTarget() && InpAccountType != Personal) {
+            interval_trade.CloseOrder();
+            Print("CLOSE BY PROFIT TARGET");
+         }
+         if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != Trailing && InpTradeMgt != OpenTrailing)) {
+            interval_trade.CloseOrder();         
+            Print("CLOSE BY DEADLINE");
+         }
       }
       // check order here. if order is active, increment
       interval_trade.SetNextTradeWindow();
@@ -71,10 +78,10 @@ void OnTick()
          interval_trade.logger(StringFormat("Checked Order Pool. %i Positions Found.", positions_added));
          interval_trade.logger(StringFormat("%i Orders in Active List", interval_trade.NumActivePositions()));
       }
-      
       if (interval_trade.IsNewDay()) { interval_trade.ClearOrdersToday(); }
       interval_trade.ModifyOrder();
       interval_app.InitializeUIElements();
    }
+   
   }
 //+------------------------------------------------------------------+

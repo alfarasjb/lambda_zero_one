@@ -7,55 +7,6 @@ CTrade Trade;
 
 #include "definition.mqh"
 
-// ------------------------------- TEMPLATES ------------------------------- //
-
-struct RiskProfile{
-
-   double            RP_amount;
-   float             RP_lot, RP_spread; 
-   int               RP_holdtime;
-   Orders            RP_order_type; 
-   ENUM_TIMEFRAMES   RP_timeframe;
-   
-} RISK_PROFILE;
-
-struct TradeLog{
-
-   double      order_open_price, order_open_spread;
-   datetime    order_open_time, order_target_close_time;
-   
-   double      order_close_price, order_close_spread;
-   datetime    order_close_time;
-   
-   long        order_open_ticket, order_close_ticket;
-
-} TRADE_LOG;
-
-struct TradeQueue{
-
-   datetime next_trade_open, next_trade_close, curr_trade_open, curr_trade_close;
-} TRADE_QUEUE;
-
-struct ActivePosition{
-   /*
-   Template for holding information used for validating if trades exceeded deadlines
-   */
-   
-   datetime    pos_open_time, pos_close_deadline;
-   int         pos_ticket;
-};
-
-struct TradesActive{
-
-   datetime    trade_open_datetime, trade_close_datetime;
-   long        trade_ticket;
-   int         candle_counter, orders_today;
-   
-   ActivePosition    active_positions[];
-} TRADES_ACTIVE;
-
-
-// ------------------------------- TEMPLATES ------------------------------- //
 
 
 // ------------------------------- CLASS ------------------------------- //
@@ -69,13 +20,17 @@ class CIntervalTrade{
    public: 
       // TRADE PARAMETERS
       float       order_lot;
-      double      entry_price, sl_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot;
+      double      entry_price, sl_price, tp_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot, ACCOUNT_DEPOSIT;
+      
+      // FUNDED 
+      double      funded_target_equity, funded_target_usd; 
       
       CIntervalTrade();
       ~CIntervalTrade(){};
       
       // INIT 
       void              SetRiskProfile();
+      void              SetFundedProfile();
       double            CalcLot();
       
       // ENCAPSULATION
@@ -112,6 +67,7 @@ class CIntervalTrade{
       void              ClearOrdersToday();
       void              ClearPositions();
       int               NumActivePositions();
+      int               RemoveTradeFromPool(int ticket);
       
       // MAIN METHODS
       bool              UpdateCSV(string log_type); //
@@ -124,10 +80,23 @@ class CIntervalTrade{
       bool              ModifyOrder();//
       int               SetBreakeven(); //
       int               TrailStop(); //
+      int               TrailStopsOnClose();
       void              CheckOrderDeadline();
       bool              CorrectPeriod();
       bool              ValidTradeOpen();
       bool              MinimumEquity();
+      bool              IsRiskFree(int ticket);
+      bool              OrderIsClosed(int ticket);
+      
+      
+      // FUNDED
+      float             RiskScaling();
+      double            CalcTP();
+      double            CalcTradePoints(double target_amount);
+      bool              ProfitTargetReached();
+      bool              EvaluationPhase();
+      bool              BelowAbsoluteDrawdownThreshold();
+      bool              EquityReachedProfitTarget();
       
       // TRADE OPERATIONS
       
@@ -136,7 +105,8 @@ class CIntervalTrade{
       double            PosLots();
       string            PosSymbol();
       int               PosMagic();
-      int               PosOpenTime();
+      datetime          PosOpenTime();
+      datetime          PosCloseTime();
       double            PosOpenPrice(); 
       double            PosProfit();
       ENUM_ORDER_TYPE   PosOrderType();
@@ -148,6 +118,7 @@ class CIntervalTrade{
       int               OP_OrderOpen(string symbol, ENUM_ORDER_TYPE order_type, double volume, double price, double sl, double tp);
       bool              OP_TradeMatch(int index);
       int               OP_OrderSelectByTicket(int ticket);
+      int               OP_OrderSelectByIndex(int index);
       int               OP_ModifySL(double sl);
       int               OP_SelectTicket(); // mql5 only
       
@@ -167,11 +138,16 @@ class CIntervalTrade{
       int               util_is_pending(ENUM_ORDER_TYPE ord_type);
       
       double            account_balance();
+      double            account_equity();
       string            account_server();
       double            account_deposit();
       
-      int               logger(string message);
+      int               logger(string message, bool notify = false);
       void              errors(string error_message);
+      bool              notification(string message);
+      
+      
+      // HISTORY
       
 };
 
@@ -182,9 +158,186 @@ CIntervalTrade::CIntervalTrade(void){
    tick_value = util_tick_val();
    trade_points = util_trade_pts();
    
+   ACCOUNT_DEPOSIT = account_deposit();
    TRADES_ACTIVE.candle_counter = 0;
    TRADES_ACTIVE.orders_today = 0;
 }
+
+
+// ------------------------------- HISTORY ------------------------------- //
+
+/*
+
+NEEDED:
+track history as struct
+track consecutive losses for sizing down. 
+track equity drawdown 
+
+METHODS: 
+
+Check history list if data is already tracked. 
+
+If number of items in history struct is not equal to the number of trades
+in history, recalculate everything. only do this every new day, or every closed trade. 
+
+Append to history - called when trade is closed. 
+
+current drawdown 
+*/
+
+// ------------------------------- HISTORY ------------------------------- //
+
+
+// ------------------------------- FUNDED ------------------------------- //
+
+
+/*
+FUNDED NOTES: 
+
+Scale Lot and risk until target equity is reached, then normalize (1). 
+Calculate TP until target equity is reached, then normalize (0)
+
+SAFEGUARD CHALLENGE DRAWDOWN Size Down to 1 
+
+** USE TRAILING STOP 
+*/
+void CIntervalTrade::SetFundedProfile(void){
+
+   funded_target_usd = ACCOUNT_DEPOSIT * (InpProfitTarget / 100);
+   funded_target_equity = ACCOUNT_DEPOSIT + funded_target_usd;
+}
+
+
+float CIntervalTrade::RiskScaling(void){
+   /*
+   Scales lot size based on account type and drawdown rules.
+   
+   Personal Account: 
+      DD Scale = 0.5 
+      Default = 1;
+      
+   Challenge: 
+      ProfitTargetReached = Live
+      DD Scale = Input (ChallDDScale)
+      Default = Challenge (Input)
+      
+   Funded:
+      DD Scale = Input (ChallDDScale)
+      Default = Live
+      
+   */
+   switch(InpAccountType){
+      case Personal: 
+         if (BelowAbsoluteDrawdownThreshold()) return InpDDScale;
+         return 1; 
+         break;
+         
+      case Challenge:
+         if (ProfitTargetReached()) return InpLiveScale; 
+         if (BelowAbsoluteDrawdownThreshold()) return InpChallDDScale;
+         return InpChallScale;
+         break;
+         
+      case Funded:
+         if (BelowAbsoluteDrawdownThreshold()) return InpLiveDDScale; 
+         return InpLiveScale;
+         break;
+         
+      default: 
+         return 1; 
+         break;
+   }
+}
+
+
+double CIntervalTrade::CalcTP(void){
+   /*
+   Calculates TP Points. 
+   
+   Used with challenge account, sets a take profit needed to achieve profit target. 
+   */
+   
+   double current_account_profit = account_balance() - ACCOUNT_DEPOSIT; 
+   double remaining_profit_target = funded_target_usd - current_account_profit;
+   
+   
+   
+   double take_profit_points = (remaining_profit_target) / (CalcLot() * tick_value * (1 / trade_points)); 
+   double points = take_profit_points / trade_points;
+   
+   double tp = entry_price + take_profit_points;
+   
+   if (points < InpMinTargetPts) return (InpMinTargetPts * trade_points);
+  
+   
+   return take_profit_points;   
+}
+
+
+
+bool CIntervalTrade::ProfitTargetReached(void){
+   /*
+   Boolean validtion for checking if account balance is below target equity.
+   
+   Returns false if profit target is not yet reached. 
+   True if otherwise
+   */
+   if (account_balance() < funded_target_equity) return false; 
+   return true; 
+}
+
+bool CIntervalTrade::EvaluationPhase(void){
+   /*
+   Boolean validation for checking if account is still in evaluation phase (below target equity.)
+   */
+   if (InpAccountType == Challenge && !ProfitTargetReached()) return true;
+   return false;
+}
+
+bool CIntervalTrade::BelowAbsoluteDrawdownThreshold(void){
+   /*
+   Boolean Validation. Checks if current balance is below threshold of drawdown. 
+   
+   If current balance is below drawdown threshold, algo must size down. 
+   
+   Returns true if current balance is below threshold. 
+   False if otherwise. 
+   
+   Example: 
+   Chall Thresh - 5% 
+   deposit = 100000 
+   threshold = 95000 
+   balance = 98000 -> false 
+   balance = 93000 -> false
+   
+   Safeguard for Challenge MaxDD
+   */
+   
+   double threshold = InpAccountType == Personal ? InpAbsDDThresh : InpPropDDThresh; 
+  
+   
+   double equity_threshold = ACCOUNT_DEPOSIT * (1 - (threshold / 100));
+   
+   if (account_balance() < equity_threshold) return true; 
+   return false;
+}
+
+bool CIntervalTrade::EquityReachedProfitTarget(void){
+   /*
+   Boolean validation for checking if account equity has reached profit target. 
+   
+   Difference with ProfitTargetReached is that this method is called on tick instead of 
+   per trade. 
+   
+   Used for manually closing if equity ticks above target equity. 
+   */
+   
+   if ((account_equity() >= funded_target_equity) && (account_balance() < funded_target_equity)) return true; 
+   return false;
+}
+
+// ------------------------------- FUNDED ------------------------------- //
+
 
 // ------------------------------- INIT ------------------------------- //
 
@@ -203,20 +356,35 @@ void CIntervalTrade::SetRiskProfile(void){
 double CIntervalTrade::CalcLot(){
    /*
    Calculates lot size based on scale factor, risk amount, percentage basket allocation
+   
+   Risk Profile Scaling - scales overall risk amount based on account size. (dependent on risk profile created by optimization on python 
+   using tradetestlib.)
+   
+   Equity scaling creates a multiplier that adjusts lot size base on current equity over initial investment. 
+   Disabled if account is in evaluation phase (Account Type is challenge and balance below target equity.)
+   
+   Ex.
+   Deposit = 100000
+   Current = 110000
+   
+   equity_scaling = 1.1 
+   
+   Risk Scaling - scales lot size based on account type and drawdown rules defined in RiskScaling();
    */
+   
+   // RISK PROFILE SCALING
    double risk_amount_scale_factor = InpRiskAmount / RISK_PROFILE.RP_amount;
    true_risk = InpAllocation * InpRiskAmount; 
    
+   // EQUITY SCALING
+   double equity_scaling = !EvaluationPhase() ? InpSizing == Dynamic ? account_balance() / ACCOUNT_DEPOSIT : 1 : 1; 
    
-   // equity scaling adjusts lot size based on current equity over initial investment. 
-   double deposit = account_deposit();
+   // RISK SCALING 
+   double risk_scaling = RiskScaling();
    
-   // WARNING: 100000 is a dummy value. use for strategy tester only.
-   deposit = deposit == -1 ? 100000 : deposit;
+   double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling * risk_scaling;
    
-   double equity_scaling = InpSizing == Dynamic ? account_balance() / deposit : 1; 
-   
-   double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling;
+   // Clipping. Prevents over sizing.
    scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
    
    
@@ -240,6 +408,10 @@ void CIntervalTrade::TradeParamsLong(string trade_type){
    if (trade_type == "pending") entry_price = util_last_candle_open();
    
    sl_price = entry_price - ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points)));
+   
+   
+   // SET TP PRICE ONLY IF CHALLENGE, AND BELOW TARGET EQUITY 
+   tp_price = EvaluationPhase() ? (entry_price + CalcTP()) : 0; 
 }
 
 void CIntervalTrade::TradeParamsShort(string trade_type){
@@ -250,6 +422,9 @@ void CIntervalTrade::TradeParamsShort(string trade_type){
    if (trade_type == "pending") entry_price = util_last_candle_open();
    
    sl_price = entry_price + ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points)));
+
+   tp_price = EvaluationPhase() ? (entry_price - CalcTP()) : 0;
+
 }
 
 void CIntervalTrade::GetTradeParams(string trade_type){
@@ -297,7 +472,7 @@ void CIntervalTrade::SetDelayedEntry(double price){
    Sets delayed entry reference price when spreads are too wide
    */
    logger(StringFormat("Last Open: %f", util_last_candle_open()));
-   logger(StringFormat("Set Delayed Entry Reference Price: %f, Spread: %f", price, util_market_spread()));
+   logger(StringFormat("Set Delayed Entry Reference Price: %f, Spread: %f", price, util_market_spread()), true);
    delayed_entry_reference = price;
 }
 
@@ -518,6 +693,28 @@ bool CIntervalTrade::TradeInPool(int ticket){
    
 }
 
+int CIntervalTrade::RemoveTradeFromPool(int ticket){
+   
+   int trades_in_pool = NumActivePositions();
+   ActivePosition last_positions[];
+   
+   
+   for (int i = 0; i < trades_in_pool; i++){
+     
+      if (ticket == TRADES_ACTIVE.active_positions[i].pos_ticket) continue; 
+      int num_last_positions = ArraySize(last_positions);
+      ArrayResize(last_positions, num_last_positions + 1);
+      last_positions[num_last_positions] = TRADES_ACTIVE.active_positions[i];
+   }
+   ArrayFree(TRADES_ACTIVE.active_positions);
+   ArrayCopy(TRADES_ACTIVE.active_positions, last_positions);
+   
+   
+   return ArraySize(last_positions);
+   
+   
+}
+
 void  CIntervalTrade::AddOrderToday(void)       { TRADES_ACTIVE.orders_today++; } // Increments orders today
 void  CIntervalTrade::ClearOrdersToday(void)    { TRADES_ACTIVE.orders_today = 0; } // Sets orders today to 0
 void  CIntervalTrade::ClearPositions(void)      { ArrayFree(TRADES_ACTIVE.active_positions); } // Clears active positions
@@ -572,13 +769,20 @@ void CIntervalTrade::CheckOrderDeadline(void){
    trade is requested to close.
    
    Redundancy in case close_order() fails.
+   
    */
    
-   int active = NumActivePositions();
    
+   //if (InpAccountType == Challenge && !EquityReachedProfitTarget() && InpTradeMgt == Trailing) return;
+   if (InpTradeMgt == OpenTrailing) return;
+   int active = NumActivePositions();
    for (int i = 0; i < active; i++){
       ActivePosition pos = TRADES_ACTIVE.active_positions[i];
       if (pos.pos_close_deadline > TimeCurrent()) continue;
+      if (OrderIsClosed(pos.pos_ticket)) {
+         logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool", pos.pos_ticket, NumActivePositions()));
+         continue;
+      }
       OP_CloseTrade(pos.pos_ticket); 
    }
 }
@@ -641,21 +845,30 @@ int CIntervalTrade::TrailStop(void){
    /*
    Iterates through active positions, sets trail stop 
    */
-   
    int active = NumActivePositions();
    
    for (int i = 0; i < active; i++){
-   
+      
       int ticket = TRADES_ACTIVE.active_positions[i].pos_ticket;
+      datetime deadline = TRADES_ACTIVE.active_positions[i].pos_close_deadline;
       int s = OP_OrderSelectByTicket(ticket);
       
       double trade_open_price = PosOpenPrice();
       double last_open_price = util_last_candle_open();
       
+
+      
       double diff = MathAbs(trade_open_price - last_open_price) / trade_points;
       
-      if (diff < InpTrailInterval) continue;
       
+      //if (InpTradeMgt == TrailOnClose && TimeCurrent() < deadline) continue; 
+      //if (InpTradeMgt == TrailOnClose && PosProfit() < 0) OP_CloseTrade(ticket);
+      
+      
+      
+      if (diff < InpTrailInterval) {
+         continue;
+      }
       ENUM_ORDER_TYPE position_order_type = PosOrderType();
       
       double updated_sl = PosSL();
@@ -670,24 +883,130 @@ int CIntervalTrade::TrailStop(void){
          case ORDER_TYPE_BUY: 
          
             updated_sl = last_open_price - trail_factor;
-            if (updated_sl < current_sl) continue;
+            if (updated_sl <= current_sl) continue;
             break;
             
          case ORDER_TYPE_SELL:
          
             updated_sl = last_open_price + trail_factor;
-            if (updated_sl > current_sl) continue;
+            if (updated_sl >= current_sl) continue;
             break;
             
          default:
             continue;
             
       }
+      
       c = OP_ModifySL(updated_sl);
-      if (c) logger("Trail Stop Updated");
+      
+      if (c) {
+         logger(StringFormat("Trail Stop Updated. Ticket: %i", ticket), true);
+         return 1;
+      }
+      else logger(StringFormat("ERROR UPDATING SL: %i CURRENT: %f, TARGET: %f", GetLastError(), current_sl, updated_sl));
    }
    
    return 1;
+}
+
+int CIntervalTrade::TrailStopsOnClose(void){
+      
+      /*
+      CALCULATING DIFF: 
+         If sl != open price, use open price. 
+         if sl >= open price (if buy) use sl price
+      */
+      
+      
+//if (InpTradeMgt == TrailOnClose && TimeCurrent() >= deadline && PosProfit() <= 0) OP_CloseTrade(ticket);
+/*
+      TRAIL ON CLOSE: 
+      
+      ACTIVATION: On Trade Deadline
+      ACTIONS: Close, Ignore, Trail 
+      
+      CLOSE: 
+         If diff < InpTrail Interval and trade in profit 
+         
+         If Trade in loss and past deadline 
+         
+      IGNORE   
+         Not yet deadline 
+         
+      TRAIL
+         Trade in profit, diff > Trail Interval
+      
+   if (InpTradeMgt == TrailOnClose) {
+         if (TimeCurrent() < deadline) {
+            Print("NOT YET DEADLINE");
+            break;
+         }            
+         if ((PosProfit() < 0 && TimeCurrent() >= deadline) || (diff < InpTrailInterval)) {
+            Print("CLOSE BY LOSS");
+            OP_CloseTrade(ticket);
+            break;
+         }
+      }
+      
+      */
+      
+      int active = NumActivePositions();
+      int num_trailed_positions = 0;
+      
+      for (int i = 0; i < active; i ++){
+         ActivePosition active_trade = TRADES_ACTIVE.active_positions[i];
+         
+         uint ticket = active_trade.pos_ticket;
+         int s = OP_OrderSelectByTicket(ticket);
+         datetime open_time = active_trade.pos_open_time;
+         datetime deadline = active_trade.pos_close_deadline;
+      
+         
+         // Ignores if not yet deadline. TrailOnClose only works if deadline has passed.
+         //if (!CheckTradeDeadline(open_time) && TimeCurrent() < deadline) continue; 
+         
+         // Closes trade if deadline has passed and trade is not in profit. 
+         if (PosProfit() < 0 && CheckTradeDeadline(open_time) && TimeCurrent() > deadline) OP_CloseTrade(ticket);
+         
+         ENUM_ORDER_TYPE position_order_type = PosOrderType();
+         
+         double updated_sl = PosSL();
+         double current_sl = updated_sl; 
+         double trade_open_price = PosOpenPrice();
+         double last_open_price = util_last_candle_open();
+         
+         int c = 0;
+         double trail_factor = InpTrailInterval * trade_points;
+         
+         // Determines which gap to measure. if price is already risk free, use sl. if not, use trade open price
+         //double trail_stop_reference_price = IsRiskFree(ticket) ? current_sl : trade_open_price;
+         double trail_stop_reference_price = trade_open_price;
+         double diff = MathAbs(trail_stop_reference_price - last_open_price) / trade_points;
+         
+         // SKIP IF GAP IS SMALL
+         if (diff < InpTrailInterval) continue;
+         
+         switch(position_order_type){
+            case ORDER_TYPE_BUY:
+               updated_sl = last_open_price - trail_factor; 
+               if (updated_sl < current_sl) continue; 
+               break; 
+            case ORDER_TYPE_SELL:
+               updated_sl = last_open_price = trail_factor; 
+               if (updated_sl > current_sl) continue;
+               break;
+            default:
+               continue;
+         }
+         c = OP_ModifySL(updated_sl);
+         if (c) {
+            logger(StringFormat("Trail Stop Updated. Ticket: %i", ticket), true);
+            num_trailed_positions++;
+         }
+         
+      }
+      return num_trailed_positions;
+      
 }
 
 int CIntervalTrade::SetBreakeven(void){
@@ -720,6 +1039,9 @@ bool CIntervalTrade::ModifyOrder(void){
          break;
       case Trailing:
          TrailStop();
+         break;
+      case OpenTrailing:
+         TrailStopsOnClose();
          break;
       default:
          break;
@@ -828,8 +1150,8 @@ int CIntervalTrade::SendMarketOrder(void){
    
    
    
-   int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), entry_price, sl_price, 0);
-   if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()));
+   int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), entry_price, sl_price, tp_price);
+   if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()), true);
    SetTradeOpenDatetime(TimeCurrent(), ticket);
    
    ActivePosition ea_pos;
@@ -926,6 +1248,43 @@ bool CIntervalTrade::MinimumEquity(void){
    return true;
 }
 
+bool CIntervalTrade::IsRiskFree(int ticket){
+   // COMPARE SL AND ENTRY PRICE
+   ENUM_ORDER_TYPE position_order_type = PosOrderType();
+   
+   switch(position_order_type){
+      case ORDER_TYPE_BUY: 
+         if (PosSL() < PosOpenPrice()) return false;
+         break; 
+         
+      case ORDER_TYPE_SELL:
+         if (PosSL() > PosOpenPrice()) return false;
+         break;
+         
+      default:
+         return false;
+         break;
+   }
+   return true;
+}
+
+bool CIntervalTrade::OrderIsClosed(int ticket){
+   //int s = OP_OrderSelectByTicket(ticket);
+   
+   int num_open_positions = PosTotal();
+   if (num_open_positions == 0) {
+      RemoveTradeFromPool(ticket);
+      return true; 
+   }
+   for (int i = 0; i < num_open_positions; i++){
+      int s = OP_OrderSelectByIndex(i);
+      if (PosTicket() == ticket) return false; 
+      
+   }
+   RemoveTradeFromPool(ticket);
+   return true;
+}
+
 // ------------------------------- MAIN ------------------------------- //
 
 
@@ -946,7 +1305,8 @@ int               CIntervalTrade::PosTicket()      { return OrderTicket(); }
 double            CIntervalTrade::PosLots()        { return OrderLots(); }
 string            CIntervalTrade::PosSymbol()      { return OrderSymbol(); }
 int               CIntervalTrade::PosMagic()       { return OrderMagicNumber(); }
-int               CIntervalTrade::PosOpenTime()    { return OrderOpenTime(); }
+datetime          CIntervalTrade::PosOpenTime()    { return OrderOpenTime(); }
+datetime          CIntervalTrade::PosCloseTime()   { return OrderCloseTime(); }
 double            CIntervalTrade::PosOpenPrice()   { return OrderOpenPrice(); }
 double            CIntervalTrade::PosProfit()      { return OrderProfit(); }
 ENUM_ORDER_TYPE   CIntervalTrade::PosOrderType()   { return OrderType(); }
@@ -968,6 +1328,8 @@ int CIntervalTrade::OP_OrdersCloseAll(void){
    for (int i = 0; i < open_positions; i++){
    
       int ticket = TRADES_ACTIVE.active_positions[i].pos_ticket;
+      
+      
       OP_CloseTrade(ticket);
    }
    
@@ -984,6 +1346,10 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    */
    
    int t = OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES);
+   if (OrderIsClosed(ticket)) {
+         logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool.", ticket, NumActivePositions()));
+         return 1;
+   }
    
    ENUM_ORDER_TYPE ord_type = OrderType();
    int pending = util_is_pending(ord_type);
@@ -997,7 +1363,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
       case ORDER_TYPE_SELL: 
       
          c = OrderClose(OrderTicket(), PosLots(), ClosePrice(), 3);
-         if (!c) logger(StringFormat("ORDER CLOSE FAILED. TICKTE: %i, ERROR: %i", ticket, GetLastError()));
+         if (!c) logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), true);
          break;
          
       case ORDER_TYPE_BUY_LIMIT:
@@ -1018,7 +1384,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    SetOrderCloseLogInfo(ClosePrice(), TimeCurrent(), PosTicket());
    
    if (!UpdateCSV("close")) logger("Failed to write to CSV. Order: CLOSE");
-   if (c) logger(StringFormat("Closed: %i", PosTicket()));
+   if (c) logger(StringFormat("Closed: %i P/L: %f", PosTicket(), PosProfit()), true);
    
    return 1;
 }
@@ -1035,8 +1401,8 @@ int CIntervalTrade::OP_OrderOpen(
    Sends a market order
    */
 
-   logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
-   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, 0, (string)InpMagic, InpMagic, 0, clrNONE);
+   logger(StringFormat("ORDER OPEN: Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()), true);
+   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, tp_price, (string)InpMagic, InpMagic, 0, clrNONE);
    return ticket;
 }
 
@@ -1062,6 +1428,12 @@ int CIntervalTrade::OP_OrderSelectByTicket(int ticket){
    return s;
 }
 
+
+int CIntervalTrade::OP_OrderSelectByIndex(int index){
+   int c = OrderSelect(index, SELECT_BY_POS, MODE_TRADES);
+   return c; 
+}
+
 int CIntervalTrade::OP_ModifySL(double sl){
    
    /*
@@ -1069,13 +1441,13 @@ int CIntervalTrade::OP_ModifySL(double sl){
    */
    
    // SELECT THE TICKET PLEASE 
-   int m = OrderModify(PosTicket(), PosOpenPrice(), sl, 0, 0);
+   int m = OrderModify(PosTicket(), PosOpenPrice(), sl, PosTP(), 0);
    return m;
 }
 
 double   CIntervalTrade::account_deposit(void) {
    /*
-   Returns initial deposit by iterating through history. 
+   Returns initial deposit by iterating through. 
    
    Deposit is the last entry, hence the loop is decrementing. 
    */
@@ -1085,7 +1457,8 @@ double   CIntervalTrade::account_deposit(void) {
       int s = OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
       if (OrderType() == 6) return OrderProfit();
    }
-   return -1; 
+   //logger("Deposit not found. Using Dummy.");
+   return InpDummyDeposit; 
 }
 
 #endif
@@ -1158,7 +1531,7 @@ int CIntervalTrade::OP_OrdersCloseAll(){
 }
 
 
-int CIntervalTrade::OP_CloseTrade(int ticket){
+int CIntervalTrade::OP_CloseTrade(int ticket){ 
    int t = PositionSelectByTicket(ticket);
    
    
@@ -1170,7 +1543,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
          // market order
          if (PositionGetDouble(POSITION_PROFIT) > 0 && InpTradeMgt == Trailing) return -2; // ignores open positions in profit when using trail stop 
          c = Trade.PositionClose(ticket); // closes positions in loss when using trail stop 
-         if (!c) { logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()));}
+         if (!c) { logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), true);}
          break;
       case ORDER_TYPE_BUY_LIMIT:
       case ORDER_TYPE_SELL_LIMIT:
@@ -1187,7 +1560,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    SetOrderCloseLogInfo(ClosePrice(), TimeCurrent(), PosTicket());
    
    if (!UpdateCSV("close")) { logger("Failed to write to CSV. Order: CLOSE"); }
-   if (c) { logger(StringFormat("Closed: %i", PosTicket())); }
+   if (c) { logger(StringFormat("Closed: %i P/L", PosTicket(), PosProfit()), true); }
    return c;
 }
 
@@ -1201,8 +1574,8 @@ int CIntervalTrade::OP_OrderOpen(
    double            sl, 
    double            tp){
    
-   bool t = Trade.PositionOpen(symbol, order_type, volume, price, sl, tp, NULL);
-   logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()));
+   bool t = Trade.PositionOpen(symbol, order_type, NormalizeDouble(volume, 2), entry_price, sl_price, tp_price, NULL);
+   logger(StringFormat("ORDER OPEN: Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl_price, tp_price, util_market_spread()), true);
    if (!t) { Print(GetLastError()); }
    int order_ticket = OP_SelectTicket();
    return order_ticket;
@@ -1237,9 +1610,16 @@ int CIntervalTrade::OP_OrderSelectByTicket(int ticket){
    return s;
 }
 
+int CIntervalTrade::OP_OrderSelectByIndex(int index){
+   int ticket = PositionGetTicket(index);
+   int t = PositionSelectByTicket(ticket);
+   return t;
+}
+
 int CIntervalTrade::OP_ModifySL(double sl){
    // SELECT THE TICKET PLEASE
    int m = Trade.PositionModify(PosTicket(), sl, PosTP());
+   if (!m) logger(StringFormat("ERROR MODIFYING SL: %i", GetLastError());
    return m;
 }
 
@@ -1255,7 +1635,8 @@ double CIntervalTrade::account_deposit(void){
       
       if (type == 2) return deposit; 
    }
-   return -1;
+   //logger("Deposit not found. Using Dummy.");
+   return InpDummyDeposit;
 }
 
 
@@ -1357,10 +1738,27 @@ double CIntervalTrade::util_delayed_entry_reference(void){
    return reference;
 }
 
-int CIntervalTrade::logger(string message){
+int CIntervalTrade::logger(string message, bool notify = false){
    if (!InpTerminalMsg) return -1;
    Print("LOGGER: ", message);
+   
+   if (notify) notification(message);
+   
    return 1;
+}
+
+bool CIntervalTrade::notification(string message){
+   /*
+   Sends notification to MT4/MT5 App on Trade Open, Close, Modify
+   */
+   // CONSTRUCT MESSAGE 
+   
+   if (!InpPushNotifs) return false;
+   
+   bool n = SendNotification(message);
+   
+   if (!n) logger(StringFormat("Failed to Send Notification. Code: %i", GetLastError()));
+   return n;
 }
 
 void CIntervalTrade::errors(string error_message)     { Print("ERROR: ", error_message); }
@@ -1375,6 +1773,7 @@ int      CIntervalTrade::util_interval_day(void)      { return PeriodSeconds(PER
 int      CIntervalTrade::util_interval_current(void)  { return PeriodSeconds(PERIOD_CURRENT); }
 
 double   CIntervalTrade::account_balance(void)        { return AccountInfoDouble(ACCOUNT_BALANCE); }
+double   CIntervalTrade::account_equity(void)         { return AccountInfoDouble(ACCOUNT_EQUITY); }
 string   CIntervalTrade::account_server(void)         { return AccountInfoString(ACCOUNT_SERVER); }
 
 
