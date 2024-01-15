@@ -1479,7 +1479,7 @@ int               CIntervalTrade::PosTicket()      { return PositionGetInteger(P
 double            CIntervalTrade::PosLots()        { return PositionGetDouble(POSITION_VOLUME); }
 string            CIntervalTrade::PosSymbol()      { return PositionGetString(POSITION_SYMBOL); }
 int               CIntervalTrade::PosMagic()       { return PositionGetInteger(POSITION_MAGIC); }
-int               CIntervalTrade::PosOpenTime()    { return PositionGetInteger(POSITION_TIME); }
+datetime          CIntervalTrade::PosOpenTime()    { return PositionGetInteger(POSITION_TIME); }
 double            CIntervalTrade::PosOpenPrice()   { return PositionGetDouble(POSITION_PRICE_OPEN); }
 double            CIntervalTrade::PosProfit()      { return PositionGetDouble(POSITION_PROFIT); }
 ENUM_ORDER_TYPE   CIntervalTrade::PosOrderType()   { return PositionGetInteger(POSITION_TYPE); }
@@ -1619,7 +1619,7 @@ int CIntervalTrade::OP_OrderSelectByIndex(int index){
 int CIntervalTrade::OP_ModifySL(double sl){
    // SELECT THE TICKET PLEASE
    int m = Trade.PositionModify(PosTicket(), sl, PosTP());
-   if (!m) logger(StringFormat("ERROR MODIFYING SL: %i", GetLastError());
+   if (!m) logger(StringFormat("ERROR MODIFYING SL: %i", GetLastError()));
    return m;
 }
 
