@@ -28,7 +28,6 @@ int OnInit()
    // DRAW UI HERE
    
    
-   
    // add provision to check for open orders, in case ea gets deactivated
    //Print("interval_trade.risk_amount: ", interval_trade.risk_amount);
 //---
@@ -62,8 +61,14 @@ void OnTick()
 
       }
       else{
-         if (interval_trade.EquityReachedProfitTarget()) interval_trade.CloseOrder();
-         if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != Trailing)) interval_trade.CloseOrder();         
+         if (interval_trade.EquityReachedProfitTarget() && InpAccountType != Personal) {
+            interval_trade.CloseOrder();
+            Print("CLOSE BY PROFIT TARGET");
+         }
+         if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != Trailing && InpTradeMgt != OpenTrailing)) {
+            interval_trade.CloseOrder();         
+            Print("CLOSE BY DEADLINE");
+         }
       }
       // check order here. if order is active, increment
       interval_trade.SetNextTradeWindow();
@@ -73,11 +78,10 @@ void OnTick()
          interval_trade.logger(StringFormat("Checked Order Pool. %i Positions Found.", positions_added));
          interval_trade.logger(StringFormat("%i Orders in Active List", interval_trade.NumActivePositions()));
       }
-      
       if (interval_trade.IsNewDay()) { interval_trade.ClearOrdersToday(); }
-      
+      interval_trade.ModifyOrder();
       interval_app.InitializeUIElements();
    }
-   interval_trade.ModifyOrder();
+   
   }
 //+------------------------------------------------------------------+

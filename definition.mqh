@@ -15,6 +15,7 @@ enum SpreadManagement{
 enum TradeManagement{
    Breakeven,
    Trailing,
+   OpenTrailing,
    None
 };
 
@@ -29,7 +30,74 @@ enum AccountType{
    Funded,
 };
 
+enum HistoryInterval{
+   Monthly,
+   Yearly
+};
 
+// ------------------------------- TEMPLATES ------------------------------- //
+
+struct RiskProfile{
+
+   double            RP_amount;
+   float             RP_lot, RP_spread; 
+   int               RP_holdtime;
+   Orders            RP_order_type; 
+   ENUM_TIMEFRAMES   RP_timeframe;
+   
+} RISK_PROFILE;
+
+struct TradeLog{
+
+   double      order_open_price, order_open_spread;
+   datetime    order_open_time, order_target_close_time;
+   
+   double      order_close_price, order_close_spread;
+   datetime    order_close_time;
+   
+   long        order_open_ticket, order_close_ticket;
+
+} TRADE_LOG;
+
+struct TradeQueue{
+
+   datetime next_trade_open, next_trade_close, curr_trade_open, curr_trade_close;
+} TRADE_QUEUE;
+
+struct ActivePosition{
+   /*
+   Template for holding information used for validating if trades exceeded deadlines
+   */
+   
+   datetime    pos_open_time, pos_close_deadline;
+   int         pos_ticket;
+};
+
+struct TradesActive{
+
+   datetime    trade_open_datetime, trade_close_datetime;
+   long        trade_ticket;
+   int         candle_counter, orders_today;
+   
+   ActivePosition    active_positions[];
+} TRADES_ACTIVE;
+
+struct TradesHistory{
+   datetime    trade_open_time;
+   uint        ticket; 
+   double      profit;
+   double      rolling_balance; 
+   double      max_equity; 
+   double      percent_drawdown; 
+};
+
+struct PortfolioSeries{
+   TradesHistory trade_history[];
+} PORTFOLIO;
+
+
+
+// ------------------------------- TEMPLATES ------------------------------- //
 /*
 INPUTS:
 -------
@@ -224,6 +292,7 @@ input float             InpMaxLot         = 1; // MAX LOT - Maximum Allowable Lo
 input PositionSizing    InpSizing         = Dynamic; // POSITION SIZING - Position Sizing
 input float             InpDDScale        = 0.5; // DRAWDOWN SCALING
 input float             InpAbsDDThresh    = 10; // ABSOLUTE DRAWDOWN THRESHOLD
+input HistoryInterval   InpHistInterval   = Yearly; // HISTORY INTERVAL - Tracking Equity Drawdown
 
 input string            InpFunded         = "========== FUNDED =========="; // ========== FUNDED ==========
 input float             InpProfitTarget   = 10; // PROFIT TARGET 
@@ -243,6 +312,7 @@ input int               InpMagic          = 232323; // MAGIC NUMBER
 input string            InpLog            = "========== LOGGING =========="; // ========== LOGGING ==========
 input bool              InpLogging        = true; // CSV LOGGING - Enables/Disables Trade Logging
 input bool              InpTerminalMsg    = true; // TERMINAL LOGGING - Enables/Disables Terminal Logging
+input bool              InpPushNotifs     = true; // PUSH NOTIFICATIONS
 
 input string            InpBacktest       = "========== BACKTEST =========="; // ========== BACKTEST ==========
 input double            InpDummyDeposit   = 100000; // BACKTEST DUMMY DEPOSIT - For strategy tester
