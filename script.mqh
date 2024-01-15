@@ -18,6 +18,7 @@ int OnInit()
    #ifdef __MQL5__
    Trade.SetExpertMagicNumber(InpMagic);
    #endif 
+   interval_trade.InitHistory();
    interval_trade.SetRiskProfile();
    interval_trade.SetFundedProfile();
    //set_deadline();
@@ -27,7 +28,7 @@ int OnInit()
    interval_app.InitializeUIElements();
    // DRAW UI HERE
    
-   
+   //interval_trade.InitHistory();
    // add provision to check for open orders, in case ea gets deactivated
    //Print("interval_trade.risk_amount: ", interval_trade.risk_amount);
 //---
@@ -62,12 +63,12 @@ void OnTick()
       }
       else{
          if (interval_trade.EquityReachedProfitTarget() && InpAccountType != Personal) {
+            interval_trade.logger("Order Close By Profit Target");
             interval_trade.CloseOrder();
-            Print("CLOSE BY PROFIT TARGET");
          }
          if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != Trailing && InpTradeMgt != OpenTrailing)) {
-            interval_trade.CloseOrder();         
-            Print("CLOSE BY DEADLINE");
+            interval_trade.logger("Order Close by Deadline");
+            interval_trade.CloseOrder();      
          }
       }
       // check order here. if order is active, increment
@@ -78,9 +79,19 @@ void OnTick()
          interval_trade.logger(StringFormat("Checked Order Pool. %i Positions Found.", positions_added));
          interval_trade.logger(StringFormat("%i Orders in Active List", interval_trade.NumActivePositions()));
       }
-      if (interval_trade.IsNewDay()) { interval_trade.ClearOrdersToday(); }
+      if (interval_trade.IsNewDay()) { 
+         interval_trade.ClearOrdersToday();
+         
+      }
+         
       interval_trade.ModifyOrder();
       interval_app.InitializeUIElements();
+      if (TimeMinute(TimeCurrent()) == 0 && TimeHour(TimeCurrent()) == 15){
+         //interval_trade.ClearHistory();
+         //interval_trade.InitHistory();
+         //interval_trade.AppendToHistory();
+         interval_trade.UpdateHistoryWithLastValue();
+      }
    }
    
   }

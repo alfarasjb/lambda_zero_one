@@ -96,7 +96,9 @@ class CIntervalTrade{
       bool              ProfitTargetReached();
       bool              EvaluationPhase();
       bool              BelowAbsoluteDrawdownThreshold();
+      bool              BelowEquityDrawdownThreshold();
       bool              EquityReachedProfitTarget();
+      double            EquityDrawdownScaleFactor();
       
       // TRADE OPERATIONS
       
@@ -112,6 +114,7 @@ class CIntervalTrade{
       ENUM_ORDER_TYPE   PosOrderType();
       double            PosSL();
       double            PosTP();
+      int               PosHistTotal();
       
       int               OP_OrdersCloseAll();
       int               OP_CloseTrade(int ticket);
@@ -119,6 +122,7 @@ class CIntervalTrade{
       bool              OP_TradeMatch(int index);
       int               OP_OrderSelectByTicket(int ticket);
       int               OP_OrderSelectByIndex(int index);
+      int               OP_HistorySelectByIndex(int index);
       int               OP_ModifySL(double sl);
       int               OP_SelectTicket(); // mql5 only
       
@@ -148,7 +152,17 @@ class CIntervalTrade{
       
       
       // HISTORY
-      
+      void              InitHistory();
+      double            HighestEquity();
+      int               ConsecutiveLosses(EnumLosingStreak losing_streak = Max);
+      bool              OnLosingStreak();
+      void              ClearHistory();
+      bool              IsHistoryUpdated();
+      int               AppendToHistory(TradesHistory &history);
+      TradesHistory     LastEntry(); // return the last entry as struct
+      void              UpdatePortfolioValues(TradesHistory &history);
+      void              UpdateHistoryWithLastValue();
+      int               PortfolioHistorySize();
 };
 
 
@@ -185,6 +199,204 @@ Append to history - called when trade is closed.
 current drawdown 
 */
 
+void CIntervalTrade::InitHistory(void){
+   int num_history = PosHistTotal();
+   //int year = 2024;
+   int month = 1;
+   
+   double peak = account_deposit();
+   double cumulative_profit = 0;
+   double max_drawdown_pct = 0;
+   
+   int current_year = TimeYear(TimeCurrent());
+   
+   for (int i = 0; i < num_history; i ++){
+      
+      int s = OP_HistorySelectByIndex(i);
+      double profit = PosProfit(); 
+      uint ticket = PosTicket();
+      datetime open_time = PosOpenTime();
+      
+      MqlDateTime OrderOpenTimeStruct; 
+      
+      TimeToStruct(open_time, OrderOpenTimeStruct);
+      
+      
+      if (OrderOpenTimeStruct.year != current_year && InpHistInterval == Yearly) continue;
+      if (OrderOpenTimeStruct.mon != month && InpHistInterval == Monthly && OrderOpenTimeStruct.year != current_year) continue; 
+      if (profit == 0 || profit == account_deposit()) continue;
+      
+      // Append P/L 
+      cumulative_profit += profit; 
+      
+      // calculate rolling equity and drawdown 
+      double rolling_equity = account_deposit() + cumulative_profit; 
+      peak = rolling_equity > peak ? rolling_equity : peak;
+      
+      double drawdown = rolling_equity < peak ? (1 - (rolling_equity / peak)) * 100 : 0;
+      
+      max_drawdown_pct = drawdown > max_drawdown_pct ? drawdown : max_drawdown_pct;
+      
+      TradesHistory TRADE_HISTORY; 
+      TRADE_HISTORY.trade_open_time = open_time;
+      TRADE_HISTORY.ticket = ticket;
+      TRADE_HISTORY.profit = profit;
+      TRADE_HISTORY.rolling_balance = rolling_equity; 
+      TRADE_HISTORY.max_equity = peak; 
+      TRADE_HISTORY.percent_drawdown = drawdown;
+      
+      // APPEND TO PORTFOLIO 
+      AppendToHistory(TRADE_HISTORY);
+      //int port_series_size = ArraySize(PORTFOLIO.trade_history);
+      //ArrayResize(PORTFOLIO.trade_history, port_series_size + 1);
+      //PORTFOLIO.trade_history[port_series_size] = TRADE_HISTORY;
+      
+   }
+   
+   
+   PORTFOLIO.peak_equity = peak; 
+   PORTFOLIO.in_drawdown = account_balance() < PORTFOLIO.peak_equity ? true : false; 
+   PORTFOLIO.current_drawdown_percent = PORTFOLIO.in_drawdown ? (1 - (account_balance() / PORTFOLIO.peak_equity)) * 100 : 0; 
+   PORTFOLIO.is_losing_streak = OnLosingStreak(); 
+   PORTFOLIO.max_consecutive_losses = ConsecutiveLosses();
+   PORTFOLIO.last_consecutive_losses = ConsecutiveLosses(Last);
+   PORTFOLIO.max_drawdown_percent = max_drawdown_pct;
+   
+   logger(StringFormat("Drawdown: %i, DD Percent: %f, Losing Streak: %i, Last Consecutive: %i, Peak: %f, Current: %f", 
+      PORTFOLIO.in_drawdown, PORTFOLIO.current_drawdown_percent, PORTFOLIO.is_losing_streak, PORTFOLIO.last_consecutive_losses,
+      PORTFOLIO.peak_equity, account_balance()));
+}
+
+
+int CIntervalTrade::ConsecutiveLosses(EnumLosingStreak losing_streak = Max){
+   /*
+   iterate through portfolio 
+   */
+   
+   int num_portfolio = PortfolioHistorySize();
+   int streak = 0; // tracks streak. reset to 0 if profit is > 0
+   int max_losses = 0; // tracks maximum losses. replaced everytime streak > 0 
+   
+   double consecutive_losses[]; 
+   double current_streak[];
+   
+   for (int i = num_portfolio - 1; i >= 0; i--){
+      TradesHistory portfolio = PORTFOLIO.trade_history[i]; // each item in portfolio list created by inithistory
+      
+      if (portfolio.trade_open_time < 2024) continue;
+      if (portfolio.profit >= 0 || i == 0) { // resets everything if streak ends by: winning a trade, or last item in the list. 
+         if (streak > max_losses) {
+            // replace max losses 
+            max_losses = streak; 
+            // reset consecutive losses, resize to match max losses, copy current streak 
+            ArrayFree(consecutive_losses);
+            ArrayResize(consecutive_losses, max_losses);
+            ArrayCopy(consecutive_losses, current_streak);
+            if (losing_streak == Last) return max_losses;
+            
+         }
+         streak = 0; // reset streak and continue
+         ArrayFree(current_streak);
+         continue;
+      }
+      
+      // append current p/l to losing streak list 
+      int size = ArraySize(current_streak);
+      ArrayResize(current_streak, size + 1);
+      current_streak[size] = portfolio.profit;
+      
+      streak++; // increment if profit < 0 
+   }
+     
+   
+   return max_losses;
+}
+
+bool CIntervalTrade::OnLosingStreak(void){
+   int size = ArraySize(PORTFOLIO.trade_history);
+   if (size <= 0) return false; 
+   TradesHistory history = PORTFOLIO.trade_history[size - 1]; 
+   if (history.profit < 0) return true;
+   return false;   
+}
+
+void CIntervalTrade::ClearHistory(void){
+   ArrayFree(PORTFOLIO.trade_history);
+   ArrayResize(PORTFOLIO.trade_history, 0);
+   PORTFOLIO.peak_equity = 0;
+   PORTFOLIO.in_drawdown = 0;
+   PORTFOLIO.current_drawdown_percent = 0;
+   PORTFOLIO.is_losing_streak = 0;
+   PORTFOLIO.max_consecutive_losses = 0;
+   PORTFOLIO.last_consecutive_losses = 0;
+   PORTFOLIO.max_drawdown_percent = 0;
+   
+}
+
+bool CIntervalTrade::IsHistoryUpdated(void){
+   int size = PortfolioHistorySize();
+   if (size <= 0) return false; 
+   
+   TradesHistory history = PORTFOLIO.trade_history[size - 1];
+   if (PortfolioHistorySize() < OrdersHistoryTotal()) return false; 
+   return true;
+}
+
+TradesHistory CIntervalTrade::LastEntry(void){
+   int num_history = PosHistTotal();
+   //int s = OrderSelect(num_history - 1, SELECT_BY_POS, MODE_HISTORY);
+   int s = OP_HistorySelectByIndex(num_history - 1);
+   int size = PortfolioHistorySize();
+   
+   double stored_max_equity = size == 0 ? 0 : PORTFOLIO.trade_history[size - 1].max_equity; 
+   
+   TradesHistory TRADE_HISTORY; 
+   TRADE_HISTORY.trade_open_time = PosOpenTime();
+   TRADE_HISTORY.ticket = PosTicket();
+   TRADE_HISTORY.rolling_balance = account_balance();
+   TRADE_HISTORY.profit = PosProfit();
+   TRADE_HISTORY.max_equity = stored_max_equity; 
+   TRADE_HISTORY.percent_drawdown = TRADE_HISTORY.rolling_balance < TRADE_HISTORY.max_equity ? (1 - (TRADE_HISTORY.rolling_balance / TRADE_HISTORY.max_equity)) * 100 : 0; 
+   
+   return TRADE_HISTORY;
+}
+
+void CIntervalTrade::UpdatePortfolioValues(TradesHistory &history){
+   PORTFOLIO.peak_equity = history.rolling_balance > PORTFOLIO.peak_equity ? history.rolling_balance : PORTFOLIO.peak_equity; 
+   PORTFOLIO.in_drawdown = account_balance() < PORTFOLIO.peak_equity ? true : false; 
+   PORTFOLIO.current_drawdown_percent = PORTFOLIO.in_drawdown ? (1 - (account_balance() / PORTFOLIO.peak_equity)) * 100 : 0; 
+   PORTFOLIO.is_losing_streak = OnLosingStreak(); 
+   PORTFOLIO.max_consecutive_losses = ConsecutiveLosses();
+   PORTFOLIO.last_consecutive_losses = ConsecutiveLosses(Last);
+   PORTFOLIO.max_drawdown_percent = history.percent_drawdown > PORTFOLIO.max_drawdown_percent ? history.percent_drawdown : PORTFOLIO.max_drawdown_percent;
+}
+
+void CIntervalTrade::UpdateHistoryWithLastValue(void){
+
+   TradesHistory history = LastEntry(); 
+
+
+   int size = PortfolioHistorySize();
+   ArrayResize(PORTFOLIO.trade_history, size + 1);
+   PORTFOLIO.trade_history[size] = history;
+   
+   UpdatePortfolioValues(history);
+   
+   logger(StringFormat("Drawdown: %i, DD Percent: %f, Losing Streak: %i, Last Consecutive: %i, Peak: %f, Current: %f", 
+      PORTFOLIO.in_drawdown, PORTFOLIO.current_drawdown_percent, PORTFOLIO.is_losing_streak, PORTFOLIO.last_consecutive_losses,
+      PORTFOLIO.peak_equity, account_balance()));
+}
+
+int CIntervalTrade::AppendToHistory(TradesHistory &history){
+   int size = PortfolioHistorySize(); 
+   
+   ArrayResize(PORTFOLIO.trade_history, size + 1); 
+   PORTFOLIO.trade_history[size] = history; 
+   
+   return PortfolioHistorySize();  
+}
+
+int CIntervalTrade::PortfolioHistorySize(void) { return ArraySize(PORTFOLIO.trade_history); }
 // ------------------------------- HISTORY ------------------------------- //
 
 
@@ -229,17 +441,20 @@ float CIntervalTrade::RiskScaling(void){
    switch(InpAccountType){
       case Personal: 
          if (BelowAbsoluteDrawdownThreshold()) return InpDDScale;
+         if (BelowEquityDrawdownThreshold()) return InpDDScale; // NOT FINAL
          return 1; 
          break;
          
       case Challenge:
          if (ProfitTargetReached()) return InpLiveScale; 
          if (BelowAbsoluteDrawdownThreshold()) return InpChallDDScale;
+         if (BelowEquityDrawdownThreshold()) return InpChallDDScale;
          return InpChallScale;
          break;
          
       case Funded:
-         if (BelowAbsoluteDrawdownThreshold()) return InpLiveDDScale; 
+         if (BelowAbsoluteDrawdownThreshold()) return InpLiveDDScale;
+         if (BelowEquityDrawdownThreshold()) return InpLiveDDScale; 
          return InpLiveScale;
          break;
          
@@ -322,6 +537,15 @@ bool CIntervalTrade::BelowAbsoluteDrawdownThreshold(void){
    return false;
 }
 
+bool CIntervalTrade::BelowEquityDrawdownThreshold(void){
+   double threshold = InpAccountType == Personal ? InpEquityDDThresh : InpPropDDThresh; 
+   
+   double equity_threshold = PORTFOLIO.peak_equity * (1 - (threshold / 100));
+   
+   if (PORTFOLIO.in_drawdown && ((PORTFOLIO.last_consecutive_losses >= InpMinLoseStreak) || (PORTFOLIO.current_drawdown_percent >= InpEquityDDThresh)) && (account_balance() < equity_threshold)) return true; 
+   return false;
+}
+
 bool CIntervalTrade::EquityReachedProfitTarget(void){
    /*
    Boolean validation for checking if account equity has reached profit target. 
@@ -334,6 +558,17 @@ bool CIntervalTrade::EquityReachedProfitTarget(void){
    
    if ((account_equity() >= funded_target_equity) && (account_balance() < funded_target_equity)) return true; 
    return false;
+}
+
+double CIntervalTrade::EquityDrawdownScaleFactor(void){
+   // UNDER CONSTRUCTION
+   
+   /*
+   Find a non-linear function to scale lots using drawdown percentage and consecutive losses. 
+   */
+   if (!PORTFOLIO.in_drawdown) return 1; 
+   
+   return 1; 
 }
 
 // ------------------------------- FUNDED ------------------------------- //
@@ -1308,10 +1543,11 @@ int               CIntervalTrade::PosMagic()       { return OrderMagicNumber(); 
 datetime          CIntervalTrade::PosOpenTime()    { return OrderOpenTime(); }
 datetime          CIntervalTrade::PosCloseTime()   { return OrderCloseTime(); }
 double            CIntervalTrade::PosOpenPrice()   { return OrderOpenPrice(); }
-double            CIntervalTrade::PosProfit()      { return OrderProfit(); }
+double            CIntervalTrade::PosProfit()      { return (OrderProfit() + OrderCommission()); }
 ENUM_ORDER_TYPE   CIntervalTrade::PosOrderType()   { return OrderType(); }
 double            CIntervalTrade::PosSL()          { return OrderStopLoss(); }
 double            CIntervalTrade::PosTP()          { return OrderTakeProfit(); }
+int               CIntervalTrade::PosHistTotal()   { return OrdersHistoryTotal(); }
 
 
 
@@ -1386,6 +1622,8 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    if (!UpdateCSV("close")) logger("Failed to write to CSV. Order: CLOSE");
    if (c) logger(StringFormat("Closed: %i P/L: %f", PosTicket(), PosProfit()), true);
    
+   
+   
    return 1;
 }
 
@@ -1401,7 +1639,8 @@ int CIntervalTrade::OP_OrderOpen(
    Sends a market order
    */
 
-   logger(StringFormat("ORDER OPEN: Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()), true);
+   logger(StringFormat("ORDER OPEN: Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f", 
+      symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread()), true);
    int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, tp_price, (string)InpMagic, InpMagic, 0, clrNONE);
    return ticket;
 }
@@ -1418,21 +1657,12 @@ bool CIntervalTrade::OP_TradeMatch(int index){
    return true;
 }
 
-int CIntervalTrade::OP_OrderSelectByTicket(int ticket){
-   
-   /*
-   Selects order by ticket
-   */
-   
-   int s = OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES);
-   return s;
-}
+int CIntervalTrade::OP_OrderSelectByTicket(int ticket){ return OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES); }
 
+int CIntervalTrade::OP_OrderSelectByIndex(int index){ return OrderSelect(index, SELECT_BY_POS, MODE_TRADES); }
 
-int CIntervalTrade::OP_OrderSelectByIndex(int index){
-   int c = OrderSelect(index, SELECT_BY_POS, MODE_TRADES);
-   return c; 
-}
+int CIntervalTrade::OP_HistorySelectByIndex(int index) { return OrderSelect(index, SELECT_BY_POS, MODE_HISTORY); }
+
 
 int CIntervalTrade::OP_ModifySL(double sl){
    

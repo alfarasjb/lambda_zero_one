@@ -32,9 +32,14 @@ enum AccountType{
 
 enum HistoryInterval{
    Monthly,
-   Yearly
+   Yearly,
+   All
 };
 
+enum EnumLosingStreak{
+   Max, 
+   Last,
+};
 // ------------------------------- TEMPLATES ------------------------------- //
 
 struct RiskProfile{
@@ -92,6 +97,14 @@ struct TradesHistory{
 };
 
 struct PortfolioSeries{
+   double      current_drawdown_percent; 
+   int         max_consecutive_losses;
+   int         last_consecutive_losses;
+   bool        is_losing_streak; 
+   double      max_drawdown_percent; 
+   bool        in_drawdown; 
+   double      peak_equity;
+
    TradesHistory trade_history[];
 } PORTFOLIO;
 
@@ -293,6 +306,8 @@ input PositionSizing    InpSizing         = Dynamic; // POSITION SIZING - Positi
 input float             InpDDScale        = 0.5; // DRAWDOWN SCALING
 input float             InpAbsDDThresh    = 10; // ABSOLUTE DRAWDOWN THRESHOLD
 input HistoryInterval   InpHistInterval   = Yearly; // HISTORY INTERVAL - Tracking Equity Drawdown
+input int               InpMinLoseStreak  = 3; // MINIMUM CONSECUTIVE LOSING TRADES
+input double            InpEquityDDThresh = 5; // EQUITY DRAWDOWN THRESHOLD
 
 input string            InpFunded         = "========== FUNDED =========="; // ========== FUNDED ==========
 input float             InpProfitTarget   = 10; // PROFIT TARGET 
