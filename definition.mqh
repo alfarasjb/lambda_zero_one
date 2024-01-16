@@ -40,6 +40,8 @@ enum EnumLosingStreak{
    Max, 
    Last,
 };
+
+
 // ------------------------------- TEMPLATES ------------------------------- //
 
 struct RiskProfile{
@@ -97,13 +99,10 @@ struct TradesHistory{
 };
 
 struct PortfolioSeries{
-   double      current_drawdown_percent; 
-   int         max_consecutive_losses;
-   int         last_consecutive_losses;
-   bool        is_losing_streak; 
-   double      max_drawdown_percent; 
-   bool        in_drawdown; 
-   double      peak_equity;
+   // Portfolio Analytics
+   bool        in_drawdown, is_losing_streak; 
+   double      current_drawdown_percent, max_drawdown_percent, peak_equity; 
+   int         max_consecutive_losses, last_consecutive_losses;
 
    TradesHistory trade_history[];
 } PORTFOLIO;
@@ -340,7 +339,7 @@ input double            InpDummyDeposit   = 100000; // BACKTEST DUMMY DEPOSIT - 
 // ========== UI ========== //
 
 int   UI_X        = 5;
-int   UI_Y        = 480;
+int   UI_Y        = 100;
 int   UI_WIDTH    = 235;
 int   UI_HEIGHT   = 300; 
 
