@@ -41,6 +41,16 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
+   Print("Test Finished");
+   PrintFormat("In Drawdown: %i, DD Percent: %f, Max DD Percent: %f, Losing Streak: %i, Last Consecutive: %i, Max Consecutive: %i, Peak: %f, Current: %f", 
+      PORTFOLIO.in_drawdown, 
+      PORTFOLIO.current_drawdown_percent, 
+      PORTFOLIO.max_drawdown_percent,
+      PORTFOLIO.is_losing_streak, 
+      PORTFOLIO.last_consecutive_losses,
+      PORTFOLIO.max_consecutive_losses,
+      PORTFOLIO.peak_equity, 
+      interval_trade.account_balance());
    ObjectsDeleteAll(0, 0, -1);
   }
   
@@ -95,4 +105,13 @@ void OnTick()
    }
    
   }
+  
+  
+void OnChartEvent(const int id, const long &lparam, const double &daram, const string &sparam){
+   if (CHARTEVENT_OBJECT_CLICK){
+      if (interval_app.ObjectIsButton(sparam, interval_app.BASE_BUTTONS)){
+         interval_app.EVENT_BUTTON_PRESS(sparam);
+      }
+   }
+}
 //+------------------------------------------------------------------+

@@ -163,6 +163,8 @@ class CIntervalTrade{
       void              UpdatePortfolioValues(TradesHistory &history);
       void              UpdateHistoryWithLastValue();
       int               PortfolioHistorySize();
+      bool              BreachedConsecutiveLossesThreshold();
+      bool              BreachedEquityDrawdownThreshold();
 };
 
 
@@ -348,7 +350,8 @@ TradesHistory CIntervalTrade::LastEntry(void){
    int s = OP_HistorySelectByIndex(num_history - 1);
    int size = PortfolioHistorySize();
    
-   double stored_max_equity = size == 0 ? 0 : PORTFOLIO.trade_history[size - 1].max_equity; 
+   //double stored_max_equity = size == 0 ? 0 : PORTFOLIO.trade_history[size - 1].max_equity; 
+   double stored_max_equity = PORTFOLIO.peak_equity == 0 ? account_deposit() : PORTFOLIO.peak_equity;
    
    TradesHistory TRADE_HISTORY; 
    TRADE_HISTORY.trade_open_time = PosOpenTime();
@@ -369,6 +372,8 @@ void CIntervalTrade::UpdatePortfolioValues(TradesHistory &history){
    PORTFOLIO.max_consecutive_losses = ConsecutiveLosses();
    PORTFOLIO.last_consecutive_losses = ConsecutiveLosses(Last);
    PORTFOLIO.max_drawdown_percent = history.percent_drawdown > PORTFOLIO.max_drawdown_percent ? history.percent_drawdown : PORTFOLIO.max_drawdown_percent;
+   //PrintFormat("HISTORY: %f, MAX: %f", history.percent_drawdown, PORTFOLIO.max_drawdown_percent);
+   //Print(history.percent_drawdown);
 }
 
 void CIntervalTrade::UpdateHistoryWithLastValue(void){
@@ -442,6 +447,7 @@ float CIntervalTrade::RiskScaling(void){
       case Personal: 
          if (BelowAbsoluteDrawdownThreshold()) return InpDDScale;
          if (BelowEquityDrawdownThreshold()) return InpDDScale; // NOT FINAL
+         if (BreachedConsecutiveLossesThreshold()) return InpDDScale;
          return 1; 
          break;
          
@@ -449,12 +455,15 @@ float CIntervalTrade::RiskScaling(void){
          if (ProfitTargetReached()) return InpLiveScale; 
          if (BelowAbsoluteDrawdownThreshold()) return InpChallDDScale;
          if (BelowEquityDrawdownThreshold()) return InpChallDDScale;
+         if (BreachedConsecutiveLossesThreshold()) return InpChallDDScale;
+         if (BreachedEquityDrawdownThreshold()) return InpChallDDScale;
          return InpChallScale;
          break;
          
       case Funded:
          if (BelowAbsoluteDrawdownThreshold()) return InpLiveDDScale;
          if (BelowEquityDrawdownThreshold()) return InpLiveDDScale; 
+         if (BreachedConsecutiveLossesThreshold()) return InpLiveDDScale;
          return InpLiveScale;
          break;
          
@@ -542,7 +551,7 @@ bool CIntervalTrade::BelowEquityDrawdownThreshold(void){
    
    double equity_threshold = PORTFOLIO.peak_equity * (1 - (threshold / 100));
    
-   if (PORTFOLIO.in_drawdown && ((PORTFOLIO.last_consecutive_losses >= InpMinLoseStreak) || (PORTFOLIO.current_drawdown_percent >= InpEquityDDThresh)) && (account_balance() < equity_threshold)) return true; 
+   if (PORTFOLIO.in_drawdown && ((BreachedConsecutiveLossesThreshold()) || (BreachedEquityDrawdownThreshold())) && (account_balance() < equity_threshold)) return true; 
    return false;
 }
 
@@ -571,6 +580,15 @@ double CIntervalTrade::EquityDrawdownScaleFactor(void){
    return 1; 
 }
 
+bool CIntervalTrade::BreachedConsecutiveLossesThreshold(void){
+   if (PORTFOLIO.last_consecutive_losses < InpMinLoseStreak) return false;
+   return true;
+}
+
+bool CIntervalTrade::BreachedEquityDrawdownThreshold(void){
+   if (PORTFOLIO.current_drawdown_percent < InpEquityDDThresh) return false;
+   return true;
+}
 // ------------------------------- FUNDED ------------------------------- //
 
 
@@ -1092,7 +1110,8 @@ int CIntervalTrade::TrailStop(void){
       double last_open_price = util_last_candle_open();
       
 
-      
+      // diff is the gap between trade open price and last open price. 
+      // determines if trailing is valid 
       double diff = MathAbs(trade_open_price - last_open_price) / trade_points;
       
       
@@ -1967,6 +1986,7 @@ double CIntervalTrade::util_delayed_entry_reference(void){
    }
    return reference;
 }
+
 
 int CIntervalTrade::logger(string message, bool notify = false){
    if (!InpTerminalMsg) return -1;
