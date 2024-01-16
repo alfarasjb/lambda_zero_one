@@ -321,7 +321,7 @@ input string            InpMisc           = "========== MISC =========="; // ===
 input SpreadManagement  InpSpreadMgt      = Recursive; // SPREAD MANAGEMENT
 input float             InpSpreadDelay    = 1; // SPREAD DELAY (seconds)
 input int               InpMagic          = 232323; // MAGIC NUMBER
-
+input bool              InpShowUI         = false; // SHOW UI
 
 input string            InpLog            = "========== LOGGING =========="; // ========== LOGGING ==========
 input bool              InpLogging        = true; // CSV LOGGING - Enables/Disables Trade Logging
