@@ -72,6 +72,7 @@ CIntervalApp::CIntervalApp(CIntervalTrade &trade, int ui_x, int ui_y, int ui_wid
 
 
 void CIntervalApp::InitializeUIElements(void){
+   if (!InpShowUI) return;
    UI_Terminal(terminal, "MAIN");
    int col_1 = 15; 
    int col_2 = 100;

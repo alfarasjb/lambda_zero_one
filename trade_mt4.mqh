@@ -206,7 +206,7 @@ void CIntervalTrade::InitHistory(void){
    //int year = 2024;
    int month = 1;
    
-   double peak = account_deposit();
+   double peak = ACCOUNT_DEPOSIT;
    double cumulative_profit = 0;
    double max_drawdown_pct = 0;
    
@@ -226,13 +226,13 @@ void CIntervalTrade::InitHistory(void){
       
       if (OrderOpenTimeStruct.year != current_year && InpHistInterval == Yearly) continue;
       if (OrderOpenTimeStruct.mon != month && InpHistInterval == Monthly && OrderOpenTimeStruct.year != current_year) continue; 
-      if (profit == 0 || profit == account_deposit()) continue;
+      if (profit == 0 || profit == ACCOUNT_DEPOSIT) continue;
       
       // Append P/L 
       cumulative_profit += profit; 
       
       // calculate rolling equity and drawdown 
-      double rolling_equity = account_deposit() + cumulative_profit; 
+      double rolling_equity = ACCOUNT_DEPOSIT + cumulative_profit; 
       peak = rolling_equity > peak ? rolling_equity : peak;
       
       double drawdown = rolling_equity < peak ? (1 - (rolling_equity / peak)) * 100 : 0;
@@ -351,7 +351,7 @@ TradesHistory CIntervalTrade::LastEntry(void){
    int size = PortfolioHistorySize();
    
    //double stored_max_equity = size == 0 ? 0 : PORTFOLIO.trade_history[size - 1].max_equity; 
-   double stored_max_equity = PORTFOLIO.peak_equity == 0 ? account_deposit() : PORTFOLIO.peak_equity;
+   double stored_max_equity = PORTFOLIO.peak_equity == 0 ? ACCOUNT_DEPOSIT : PORTFOLIO.peak_equity;
    
    TradesHistory TRADE_HISTORY; 
    TRADE_HISTORY.trade_open_time = PosOpenTime();
