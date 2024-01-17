@@ -91,9 +91,10 @@ class CIntervalTrade{
       bool              OrderIsClosed(int ticket);
       
       
+      
       // FUNDED
       float             RiskScaling();
-      double            CalcTP();
+      double            CalcTP(int ticket);
       double            CalcTradePoints(double target_amount);
       bool              ProfitTargetReached();
       bool              EvaluationPhase();
@@ -101,6 +102,7 @@ class CIntervalTrade{
       bool              BelowEquityDrawdownThreshold();
       bool              EquityReachedProfitTarget();
       double            EquityDrawdownScaleFactor();
+      double            SetChallengeAccountTakeProfit();
       
       // TRADE OPERATIONS
       
@@ -117,6 +119,7 @@ class CIntervalTrade{
       double            PosSL();
       double            PosTP();
       int               PosHistTotal();
+      double            PosCommission();
       
       int               OP_OrdersCloseAll();
       int               OP_CloseTrade(int ticket);
@@ -126,6 +129,7 @@ class CIntervalTrade{
       int               OP_OrderSelectByIndex(int index);
       int               OP_HistorySelectByIndex(int index);
       int               OP_ModifySL(double sl);
+      int               OP_ModifyTP(double tp);
       int               OP_SelectTicket(); // mql5 only
       
       // UTILITIES AND WRAPPERS
@@ -569,15 +573,18 @@ float CIntervalTrade::RiskScaling(void){
 }
 
 
-double CIntervalTrade::CalcTP(void){
+double CIntervalTrade::CalcTP(int ticket){
    /*
    Calculates TP Points. 
    
    Used with challenge account, sets a take profit needed to achieve profit target. 
    */
    
+   double commission = PosCommission();
+   
    double current_account_profit = account_balance() - ACCOUNT_DEPOSIT; 
-   double remaining_profit_target = funded_target_usd - current_account_profit;
+   
+   double remaining_profit_target = funded_target_usd - current_account_profit + commission; // add commission here 
    
    
    
@@ -749,6 +756,29 @@ double CIntervalTrade::CalcLot(){
 
 // ------------------------------- INIT ------------------------------- //
 
+// NEW 
+
+double CIntervalTrade::SetChallengeAccountTakeProfit(){
+   if (InpAccountType != Challenge) return 0;
+   if (!EvaluationPhase()) return 0;
+   int active = NumActivePositions(); 
+   
+   for (int i = 0; i < active; i++){
+      int ticket = TRADES_ACTIVE.trade_ticket;
+      int t = OP_OrderSelectByTicket(ticket);
+      
+      
+      double tp_points = CalcTP(PosTicket());
+      
+      int factor = PosOrderType() == ORDER_TYPE_SELL ? -1 : 1; 
+      double take_profit_price = EvaluationPhase() ? (entry_price + (tp_points * factor)) : 0;
+      
+      int m = OP_ModifyTP(take_profit_price);
+      if (m) logger(StringFormat("Modified Take Profit for Ticket: %i", ticket), true);
+   }
+   
+   return 0;   
+}
 
 
 // ------------------------------- TRADE PARAMS ------------------------------- //
@@ -765,7 +795,7 @@ void CIntervalTrade::TradeParamsLong(string trade_type){
    
    
    // SET TP PRICE ONLY IF CHALLENGE, AND BELOW TARGET EQUITY 
-   tp_price = EvaluationPhase() ? (entry_price + CalcTP()) : 0; 
+   //tp_price = EvaluationPhase() ? (entry_price + CalcTP()) : 0; 
 }
 
 void CIntervalTrade::TradeParamsShort(string trade_type){
@@ -777,7 +807,7 @@ void CIntervalTrade::TradeParamsShort(string trade_type){
    
    sl_price = entry_price + ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points)));
 
-   tp_price = EvaluationPhase() ? (entry_price - CalcTP()) : 0;
+   //tp_price = EvaluationPhase() ? (entry_price - CalcTP()) : 0;
 
 }
 
@@ -1534,6 +1564,7 @@ int CIntervalTrade::SendMarketOrder(void){
    AddOrderToday(); // adds an order today
    // trigger an order open log containing order open price, entry time, target close time, and spread at the time of the order
    
+   SetChallengeAccountTakeProfit();
    SetOrderOpenLogInfo(entry_price, TimeCurrent(), TRADES_ACTIVE.trade_close_datetime, ticket);
    if (!UpdateCSV("open")) { logger("Failed to Write To CSV. Order: OPEN"); }
    
@@ -1683,7 +1714,7 @@ ENUM_ORDER_TYPE   CIntervalTrade::PosOrderType()   { return OrderType(); }
 double            CIntervalTrade::PosSL()          { return OrderStopLoss(); }
 double            CIntervalTrade::PosTP()          { return OrderTakeProfit(); }
 int               CIntervalTrade::PosHistTotal()   { return OrdersHistoryTotal(); }
-
+double            CIntervalTrade::PosCommission()  { return OrderCommission(); }
 
 
 int CIntervalTrade::OP_OrdersCloseAll(void){
@@ -1822,8 +1853,14 @@ int CIntervalTrade::OP_ModifySL(double sl){
    Modifies Stop Loss of selected order when breakeven or trail stop is enabled.
    */
    
+   if (sl == PosSL()) return 0;
    // SELECT THE TICKET PLEASE 
    int m = OrderModify(PosTicket(), PosOpenPrice(), sl, PosTP(), 0);
+   return m;
+}
+
+int CIntervalTrade::OP_ModifyTP(double tp){
+   int m = OrderModify(PosTicket(), PosOpenPrice(), PosSL(), tp, 0);
    return m;
 }
 
