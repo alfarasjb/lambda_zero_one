@@ -102,7 +102,7 @@ struct PortfolioSeries{
    // Portfolio Analytics
    bool        in_drawdown, is_losing_streak; 
    double      current_drawdown_percent, max_drawdown_percent, peak_equity; 
-   int         max_consecutive_losses, last_consecutive_losses;
+   int         max_consecutive_losses, last_consecutive_losses, data_points;
 
    TradesHistory trade_history[];
 } PORTFOLIO;
@@ -299,12 +299,12 @@ input float             InpRiskAmount     = 1000; // BASE RISK AMOUNT - Scales l
 input float             InpAllocation     = 1; // ALLOCATION - Percentage of Total Risk
 input TradeManagement   InpTradeMgt       = None; // TRADE MANAGEMENT - BE / Trail Stop
 input float             InpTrailInterval  = 50; // TRAIL STOP INTERVAL - Trail Points Increment
-input float             InpMinimumEquity  = 1000; // MINIMUM EQUITY - Minimum required equity to enable trading.
+input double            InpCutoff         = 0.85; // EQUITY CUTOFF - Once equity breaches cutoff, trading is disabled.
 input float             InpMaxLot         = 1; // MAX LOT - Maximum Allowable Lot 
 input PositionSizing    InpSizing         = Dynamic; // POSITION SIZING - Position Sizing
 input float             InpDDScale        = 0.5; // DRAWDOWN SCALING
 input float             InpAbsDDThresh    = 10; // ABSOLUTE DRAWDOWN THRESHOLD
-input HistoryInterval   InpHistInterval   = Yearly; // HISTORY INTERVAL - Tracking Equity Drawdown
+input HistoryInterval   InpHistInterval   = All; // HISTORY INTERVAL - Tracking Equity Drawdown
 input int               InpMinLoseStreak  = 3; // MINIMUM CONSECUTIVE LOSING TRADES
 input double            InpEquityDDThresh = 5; // EQUITY DRAWDOWN THRESHOLD
 
@@ -315,7 +315,7 @@ input float             InpChallDDScale   = 1; // CHALLENGE ACCOUNT DRAWDOWN SCA
 input float             InpLiveScale      = 0.5; // LIVE ACCOUNT SCALING
 input float             InpLiveDDScale    = 0.25; // LIVE ACCOUNT DRAWDOWN SCALING
 input float             InpMinTargetPts   = 50; // MIN TP POINTS
-input float             InpPropDDThresh  = 5; // CHALLENGE ACCOUNT DRAWDOWN THRESHOLD 
+input float             InpPropDDThresh   = 5; // CHALLENGE ACCOUNT DRAWDOWN THRESHOLD 
 
 input string            InpMisc           = "========== MISC =========="; // ========== MISC ==========
 input SpreadManagement  InpSpreadMgt      = Recursive; // SPREAD MANAGEMENT
