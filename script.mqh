@@ -3,12 +3,20 @@
 
 #include <B63/Generic.mqh>
 
+#ifdef __MQL4__
 #include "trade_mt4.mqh"
+#endif 
+
+#ifdef __MQL5__
+#include "trade_mt5.mqh"
+#endif
+
 #include "app.mqh"
+#include "loader.mqh"
 
 CIntervalTrade interval_trade;
 CIntervalApp interval_app(interval_trade, UI_X, UI_Y, UI_WIDTH, UI_HEIGHT);
-
+CLoader loader;
 
 
 
@@ -18,6 +26,7 @@ int OnInit()
    #ifdef __MQL5__
    Trade.SetExpertMagicNumber(InpMagic);
    #endif 
+   PrintFormat("%i dates loaded", loader.LoadFromFile());
    interval_trade.InitializeSymbolProperties();
    interval_trade.InitHistory();
    interval_trade.SetRiskProfile();
@@ -30,6 +39,7 @@ int OnInit()
    interval_app.InitializeUIElements();
    // DRAW UI HERE
    PrintFormat("Symbol Properties | Tick Value: %f, Trade Points: %f", interval_trade.tick_value, interval_trade.trade_points);
+   Print("NEWS DATE: ", loader.IsNewsDate());
    //interval_trade.InitHistory();
    // add provision to check for open orders, in case ea gets deactivated
    //Print("interval_trade.risk_amount: ", interval_trade.risk_amount);
@@ -66,7 +76,7 @@ void OnDeinit(const int reason)
 void OnTick()
   {
    if (IsNewCandle() && interval_trade.CorrectPeriod() && interval_trade.MinimumEquity()){
-      if (interval_trade.ValidTradeOpen()){
+      if (interval_trade.ValidTradeOpen() && !loader.IsNewsDate()){
          if (interval_trade.SendMarketOrder() == -1) { 
             
          }
@@ -116,3 +126,41 @@ void OnChartEvent(const int id, const long &lparam, const double &daram, const s
 //+------------------------------------------------------------------+
 
 
+
+/*
+void readFromFile(){
+   // read from file operation: reads last send trade
+   handle = FileOpen(filename(), FILE_READ|FILE_TXT|FILE_ANSI | FILE_COMMON);
+   string result[];
+   string sep = "|";
+   string sepChar;
+   sepChar = StringGetCharacter(sep,0);
+   if (handle != -1){
+      do{
+         string filestring = FileReadString(handle);
+       
+         int split = (int)StringSplit(filestring, sepChar, result);  
+   
+         Rtrade.orderSymbol = validateSymbol(result[0]);
+         Rtrade.orderType = (ENUM_ORDER_TYPE)result[1];
+         Rtrade.entry = (double)result[2];
+         Rtrade.stop = (double)result[3];
+         Rtrade.target = (double)result[4]; 
+         } while(!FileIsLineEnding(handle));
+      
+      FileClose(handle); 
+      if (getChange(Rtrade)){
+         if (PositionsTotal() > 0 && Rtrade.entry == 0) {
+            if(!deleteOrder(Rtrade)) ackMessage(error(1));
+         }
+         if (PositionsTotal() > 0) {
+            if (!modifyOrder(Rtrade)) ackMessage(error(2));
+         }
+         if (PositionsTotal() == 0 && Rtrade.entry > 0 && inpEnableCopy) {
+            if (!sendOrder()) ackMessage(error(3));
+         } 
+      }
+   }
+   else GetLastError();
+   }
+   */
