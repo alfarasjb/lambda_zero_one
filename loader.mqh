@@ -2,13 +2,17 @@
 #include "definition.mqh"
 
 
+/*
+   Use for backtesting only. 
+*/
+
+
 class CLoader{
    protected:
    private:
    public: 
-      datetime    BACKTEST_START_DATE;
-      datetime    DATES[];
-      datetime    date_entry;
+      datetime    BACKTEST_START_DATE, date_entry, DATES[];
+      int         NUM_LOADED_HISTORY;
       
       CLoader();
       int         LoadFromFile();
@@ -19,11 +23,12 @@ class CLoader{
       int         Dequeue();
       bool        IsNewsDate();
       datetime    ConvertToDate(datetime date);
+      
 };
 
 
 CLoader::CLoader(){
-   BACKTEST_START_DATE = StringToTime("2023.01.01");
+   BACKTEST_START_DATE = StringToTime(InpBacktestStart);
    
 }
 
@@ -57,6 +62,7 @@ int CLoader::LoadFromFile(void){
    
    PrintFormat("Processed from file: %i, Added To Dates: %i", loaded, NumDates());
    PrintFormat("START: %s END: %s", TimeToString(DATES[0]), TimeToString(DATES[NumDates() - 1]));
+   NUM_LOADED_HISTORY = loaded;
    return loaded;
 }
 
@@ -98,6 +104,7 @@ int CLoader::Dequeue(void){
 
 bool CLoader::IsNewsDate(void){
    if (InpTradeOnNews) return false;
+   if (NumDates() == 0) return false;
    datetime today = ConvertToDate(TimeCurrent());
    datetime next_entry = DATES[0];
    if (today == next_entry) return true;
