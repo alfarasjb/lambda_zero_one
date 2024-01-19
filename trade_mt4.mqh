@@ -2,6 +2,7 @@
 #ifdef __MQL5__
 #include <Trade/Trade.mqh>
 CTrade Trade;
+CDealInfo DealInfo;
 #endif 
 
 
@@ -236,7 +237,10 @@ void CIntervalTrade::InitHistory(void){
    double cumulative_profit = 0;
    double max_drawdown_pct = 0;
    
-   int current_year = TimeYear(TimeCurrent());
+   MqlDateTime current; 
+   TimeToStruct(TimeCurrent(), current); 
+   
+   int current_year = current.year;
    
    for (int i = 0; i < num_history; i ++){
       
@@ -385,7 +389,7 @@ bool CIntervalTrade::IsHistoryUpdated(void){
    if (size <= 0) return false; 
    
    TradesHistory history = PORTFOLIO.trade_history[size - 1];
-   if (PortfolioHistorySize() < OrdersHistoryTotal()) return false; 
+   if (PortfolioHistorySize() < PosHistTotal()) return false; 
    return true;
 }
 
@@ -738,7 +742,8 @@ double CIntervalTrade::CalcLot(){
    double risk_scaling = RiskScaling();
    
    double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling * risk_scaling;
-   
+   Print("SCALED: ", scaled_lot);
+   PrintFormat("RPLOT: %f, Allocation: %f, Risk Amount Scale Factor: %f, Equity Scaling: %f, Risk Scaling: %f", RISK_PROFILE.RP_lot, InpAllocation, risk_amount_scale_factor, equity_scaling, risk_scaling);
    // Clipping. Prevents over sizing.
    scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
    
@@ -747,6 +752,8 @@ double CIntervalTrade::CalcLot(){
    
    double symbol_minlot = util_symbol_minlot();
    double symbol_maxlot = util_symbol_maxlot();
+   
+   
    
    if (scaled_lot < symbol_minlot) return symbol_minlot;
    if (scaled_lot > symbol_maxlot) return symbol_maxlot;
@@ -1700,6 +1707,9 @@ bool CIntervalTrade::OrderIsClosed(int ticket){
 double            CIntervalTrade::util_market_spread(void)    { return MarketInfo(Symbol(), MODE_SPREAD); }
 double            CIntervalTrade::util_tick_val(void)         { return MarketInfo(Symbol(), MODE_TICKVALUE); }
 double            CIntervalTrade::util_trade_pts(void)        { return MarketInfo(Symbol(), MODE_POINT); }
+double            CIntervalTrade::util_symbol_minlot(void)    { return MarketInfo(Symbol(), MODE_MINLOT); }
+double            CIntervalTrade::util_symbol_maxlot(void)    { return MarketInfo(Symbol(), MODE_MAXLOT); }
+
 
 int               CIntervalTrade::PosTotal()       { return OrdersTotal(); }
 int               CIntervalTrade::PosTicket()      { return OrderTicket(); }
@@ -1892,6 +1902,8 @@ double   CIntervalTrade::account_deposit(void) {
 double            CIntervalTrade::util_tick_val()             { return SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_VALUE);}
 double            CIntervalTrade::util_trade_pts()            { return SymbolInfoDouble(Symbol(), SYMBOL_POINT);}
 double            CIntervalTrade::util_market_spread()        { return SymbolInfoInteger(Symbol(), SYMBOL_SPREAD); }
+double            CIntervalTrade::util_symbol_maxlot()        { return SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MAX); }
+double            CIntervalTrade::util_symbol_minlot()        { return SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN); }
 
 int               CIntervalTrade::PosTotal()       { return PositionsTotal(); }
 int               CIntervalTrade::PosTicket()      { return PositionGetInteger(POSITION_TICKET); }
@@ -1904,7 +1916,8 @@ double            CIntervalTrade::PosProfit()      { return PositionGetDouble(PO
 ENUM_ORDER_TYPE   CIntervalTrade::PosOrderType()   { return PositionGetInteger(POSITION_TYPE); }
 double            CIntervalTrade::PosSL()          { return PositionGetDouble(POSITION_SL); }
 double            CIntervalTrade::PosTP()          { return PositionGetDouble(POSITION_TP); }
-
+int               CIntervalTrade::PosHistTotal()   { return HistoryDealsTotal(); }
+double            CIntervalTrade::PosCommission()  { return DealInfo.Commission(); }
 
 int CIntervalTrade::OP_OrdersCloseAll(){
    int tickets[];
@@ -1960,7 +1973,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
       case ORDER_TYPE_BUY:
       case ORDER_TYPE_SELL:
          // market order
-         if (PositionGetDouble(POSITION_PROFIT) > 0 && InpTradeMgt == Trailing) return -2; // ignores open positions in profit when using trail stop 
+         //if (PositionGetDouble(POSITION_PROFIT) > 0 && InpTradeMgt == Trailing) return -2; // ignores open positions in profit when using trail stop 
          c = Trade.PositionClose(ticket); // closes positions in loss when using trail stop 
          if (!c) { logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), true);}
          break;
@@ -2035,6 +2048,9 @@ int CIntervalTrade::OP_OrderSelectByIndex(int index){
    return t;
 }
 
+
+int CIntervalTrade::OP_HistorySelectByIndex(int index) { return HistoryOrderSelect(HistoryDealGetTicket(index)); }
+
 int CIntervalTrade::OP_ModifySL(double sl){
    // SELECT THE TICKET PLEASE
    int m = Trade.PositionModify(PosTicket(), sl, PosTP());
@@ -2042,10 +2058,16 @@ int CIntervalTrade::OP_ModifySL(double sl){
    return m;
 }
 
+int CIntervalTrade::OP_ModifyTP(double tp){
+   int m = Trade.PositionModify(PosTicket(), PosSL(), tp);
+   if (!m) logger(StringFormat("ERROR MODIFYING TP: %i", GetLastError()));
+   return m;
+}
+
 double CIntervalTrade::account_deposit(void){
    HistorySelect(0, TimeCurrent());
    
-   uint total = HistoryDealsTotal();
+   int total = HistoryDealsTotal();
    
    for (int i = 0; i < total; i++){
       ulong ticket = HistoryDealGetTicket(i);
@@ -2201,8 +2223,7 @@ double   CIntervalTrade::account_balance(void)        { return AccountInfoDouble
 double   CIntervalTrade::account_equity(void)         { return AccountInfoDouble(ACCOUNT_EQUITY); }
 string   CIntervalTrade::account_server(void)         { return AccountInfoString(ACCOUNT_SERVER); }
 
-double   CIntervalTrade::util_symbol_minlot(void)     { return MarketInfo(Symbol(), MODE_MINLOT); }
-double   CIntervalTrade::util_symbol_maxlot(void)     { return MarketInfo(Symbol(), MODE_MAXLOT); }
+
 
 double   CIntervalTrade::util_trade_diff(void)        { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points))); }
 double   CIntervalTrade::util_trade_diff_points(void) { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value)); }
@@ -2221,5 +2242,3 @@ int      CIntervalTrade::util_shift_to_entry(void) {
    return shift;
 }
 // ------------------------------- UTILS AND WRAPPERS ------------------------------- //
-
-

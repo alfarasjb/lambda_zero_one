@@ -163,7 +163,7 @@ void CIntervalApp::DrawRow(string prefix, string base_name, int row_number, stri
    // returns chart id. 
    // returns -1 if not yet created.
    
-   int object_found = ObjectFind(value_identifier); 
+   int object_found = ObjectFind(0, value_identifier); 
    switch(object_found){
       case 0: 
          ObjectSetString(0, value_identifier, OBJPROP_TEXT, value);
