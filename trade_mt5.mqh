@@ -1912,7 +1912,7 @@ int CIntervalTrade::OP_ModifySL(double sl){
 }
 
 int CIntervalTrade::OP_ModifyTP(double tp){
-   int m = Trade.PositionModify(PosTicket(), tp, PosTP());
+   int m = Trade.PositionModify(PosTicket(), PosSL(), tp);
    if (!m) logger(StringFormat("ERROR MODIFYING TP: %i", GetLastError()));
    return m;
 }
