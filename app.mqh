@@ -1,8 +1,14 @@
 // UI
 
 #include <B63/ui/CInterface.mqh>
-#include "trade_mt4.mqh"
 
+#ifdef __MQL4__
+#include "trade_mt4.mqh"
+#endif
+
+#ifdef __MQL5__ 
+#include "trade_mt5.mqh"
+#endif
 
 class CIntervalApp : public CInterface{
    protected:
@@ -101,9 +107,9 @@ void CIntervalApp::InitializeUIElements(void){
 
 void CIntervalApp::InitializeSubwindowProperties(void){
    SW_X = UI_X;
-   SW_Y = 400;
+   SW_Y = 350;
    SW_WIDTH = 270;
-   SW_HEIGHT = 300;
+   SW_HEIGHT = 250;
    SW_COLOR = clrBlack;
    
    SW_HEADER_FONTSIZE = 12; 
@@ -154,10 +160,10 @@ void CIntervalApp::DrawRow(string prefix, string base_name, int row_number, stri
    string identifier = prefix+"-LABEL-"+base_name;
    string value_identifier = prefix+"-VALUE"+base_name;
    int x_offset = 15;
-   int spacing = 10;
+   int spacing = 8;
    int row = SW_ROW_1 - ((row_number - 1) * (DefFontSize + spacing));
    
-   CTextLabel(identifier, x_offset, row, base_name, 10, DefFontStyle);
+   CTextLabel(identifier, x_offset, row, base_name, DefFontSize, DefFontStyle);
    
    
    // returns chart id. 
@@ -169,10 +175,10 @@ void CIntervalApp::DrawRow(string prefix, string base_name, int row_number, stri
          ObjectSetString(0, value_identifier, OBJPROP_TEXT, value);
          break; 
       case -1:
-         CTextLabel(value_identifier, APP_COL_2, row,value, 10, DefFontStyle);
+         CTextLabel(value_identifier, APP_COL_2, row,value, DefFontSize, DefFontStyle);
          break;
       default:
-         CTextLabel(value_identifier, APP_COL_2, row,value, 10, DefFontStyle);
+         CTextLabel(value_identifier, APP_COL_2, row,value, DefFontSize, DefFontStyle);
          break;
    }
    //CTextLabel(value_identifier, APP_COL_2, row,value, 10, DefFontStyle);

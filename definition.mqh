@@ -41,6 +41,20 @@ enum EnumLosingStreak{
    Last,
 };
 
+enum EnumOrderSendError{
+   ERR_INTERVAL_BAD_SPREAD = -10,
+   ERR_INTERVAL_INVALID_PRICE = -20,
+   ERR_RECURSIVE_DEADLINE_REACHED = -30,
+   ERR_IGNORE_DEADLINE = -40,
+   ERR_IGNORE_BAD_SPREAD = -50,
+   ERR_ORDER_SEND_FAILED = -1,
+      
+} ERR;
+
+enum AlgoMode{
+   MODE_LIVE,
+   MODE_BACKTEST,
+};
 
 // ------------------------------- TEMPLATES ------------------------------- //
 
@@ -322,6 +336,7 @@ input SpreadManagement  InpSpreadMgt      = Recursive; // SPREAD MANAGEMENT
 input float             InpSpreadDelay    = 1; // SPREAD DELAY (seconds)
 input int               InpMagic          = 232323; // MAGIC NUMBER
 input bool              InpShowUI         = false; // SHOW UI
+input bool              InpTradeOnNews    = false; // TRADE ON NEWS
 
 input string            InpLog            = "========== LOGGING =========="; // ========== LOGGING ==========
 input bool              InpLogging        = true; // CSV LOGGING - Enables/Disables Trade Logging
@@ -330,6 +345,9 @@ input bool              InpPushNotifs     = true; // PUSH NOTIFICATIONS
 
 input string            InpBacktest       = "========== BACKTEST =========="; // ========== BACKTEST ==========
 input double            InpDummyDeposit   = 100000; // BACKTEST DUMMY DEPOSIT - For strategy tester
+input string            InpBacktestStart  = "2020.01.01"; // BACKTEST START DATE 
+input bool              InpDebugLogging   = false; // DEBUG LOGGING
+input AlgoMode          InpMode           = MODE_LIVE; // DEPLOYMENT MODE
 // ========== INPUTS ========== //
 /*
 
