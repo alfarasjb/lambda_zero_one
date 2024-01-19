@@ -34,7 +34,7 @@ CLoader::CLoader(){
 
 int CLoader::LoadFromFile(void){
    string path = "lambda_zero_one\\audusd_news_dates.csv";
-   int handle = FileOpen(path, FILE_READ | FILE_CSV | FILE_COMMON, "\n");
+   int handle = FileOpen(path, FILE_READ | FILE_CSV | FILE_COMMON | FILE_ANSI, "\n");
    
    string result[];
    string sep = ",";
@@ -67,6 +67,7 @@ int CLoader::LoadFromFile(void){
 }
 
 datetime CLoader::StringToDate(string date_string){
+   Print(date_string);
    string components[];
    int date_split = (int)StringSplit(date_string, StringGetCharacter("/", 0), components);
    

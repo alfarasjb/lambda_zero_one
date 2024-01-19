@@ -124,7 +124,7 @@ void OnTick()
             interval_trade.logger("Order Close By Profit Target");
             interval_trade.CloseOrder();
          }
-         if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != Trailing && InpTradeMgt != OpenTrailing)) {
+         if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != OpenTrailing)) {
             interval_trade.logger("Order Close by Deadline");
             interval_trade.CloseOrder();      
          }
@@ -144,9 +144,6 @@ void OnTick()
          
       interval_trade.ModifyOrder();
       //interval_app.InitializeUIElements();
-      if (TimeMinute(TimeCurrent()) == 0 && TimeHour(TimeCurrent()) == 15){
-         //interval_trade.UpdateHistoryWithLastValue();
-      }
    }
    
   }

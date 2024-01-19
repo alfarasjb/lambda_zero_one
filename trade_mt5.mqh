@@ -2,10 +2,12 @@
 #ifdef __MQL5__
 #include <Trade/Trade.mqh>
 CTrade Trade;
+CDealInfo DealInfo;
 #endif 
 
 
 #include "definition.mqh"
+
 
 
 
@@ -103,6 +105,7 @@ class CIntervalTrade{
       bool              EquityReachedProfitTarget();
       double            EquityDrawdownScaleFactor();
       double            SetChallengeAccountTakeProfit();
+      bool              IsUnderperforming();
       
       // TRADE OPERATIONS
       
@@ -159,7 +162,7 @@ class CIntervalTrade{
       string            account_server();
       double            account_deposit();
       
-      int               logger(string message, bool notify = false);
+      int               logger(string message, bool notify = false, bool debug = false);
       void              errors(string error_message);
       bool              notification(string message);
       
@@ -180,6 +183,8 @@ class CIntervalTrade{
       bool              BreachedEquityDrawdownThreshold();
       ulong             PortfolioLatestTradeTicket();
       bool              TicketInPortfolioHistory(int ticket);
+      bool              AccountInDrawdown();
+      double            LatestTradeIsLoss();
 };
 
 
@@ -236,7 +241,11 @@ void CIntervalTrade::InitHistory(void){
    double cumulative_profit = 0;
    double max_drawdown_pct = 0;
    
-   int current_year = TimeYear(TimeCurrent());
+   
+   MqlDateTime current; 
+   TimeToStruct(TimeCurrent(), current);
+   
+   int current_year = current.year;
    
    for (int i = 0; i < num_history; i ++){
       
@@ -280,7 +289,7 @@ void CIntervalTrade::InitHistory(void){
    
    
    PORTFOLIO.peak_equity = peak; 
-   PORTFOLIO.in_drawdown = account_balance() < PORTFOLIO.peak_equity ? true : false; 
+   PORTFOLIO.in_drawdown = AccountInDrawdown();
    PORTFOLIO.current_drawdown_percent = PORTFOLIO.in_drawdown ? (1 - (account_balance() / PORTFOLIO.peak_equity)) * 100 : 0; 
    PORTFOLIO.is_losing_streak = OnLosingStreak(); 
    PORTFOLIO.max_consecutive_losses = ConsecutiveLosses();
@@ -385,7 +394,7 @@ bool CIntervalTrade::IsHistoryUpdated(void){
    if (size <= 0) return false; 
    
    TradesHistory history = PORTFOLIO.trade_history[size - 1];
-   if (PortfolioHistorySize() < OrdersHistoryTotal()) return false; 
+   if (PortfolioHistorySize() < PosHistTotal()) return false; 
    return true;
 }
 
@@ -421,7 +430,7 @@ void CIntervalTrade::UpdatePortfolioValues(TradesHistory &history){
    */
    PORTFOLIO.data_points = PortfolioHistorySize();
    PORTFOLIO.peak_equity = history.rolling_balance > PORTFOLIO.peak_equity ? history.rolling_balance : PORTFOLIO.peak_equity; 
-   PORTFOLIO.in_drawdown = account_balance() < PORTFOLIO.peak_equity ? true : false; 
+   PORTFOLIO.in_drawdown = AccountInDrawdown();
    PORTFOLIO.current_drawdown_percent = PORTFOLIO.in_drawdown ? (1 - (account_balance() / PORTFOLIO.peak_equity)) * 100 : 0; 
    PORTFOLIO.is_losing_streak = OnLosingStreak(); 
    PORTFOLIO.max_consecutive_losses = ConsecutiveLosses();
@@ -500,6 +509,7 @@ bool CIntervalTrade::TicketInPortfolioHistory(int ticket){
 }
 
 int CIntervalTrade::PortfolioHistorySize(void) { return ArraySize(PORTFOLIO.trade_history); }
+bool CIntervalTrade::AccountInDrawdown(void)   { return account_balance() < PORTFOLIO.peak_equity; }
 // ------------------------------- HISTORY ------------------------------- //
 
 
@@ -544,25 +554,23 @@ float CIntervalTrade::RiskScaling(void){
    */
    switch(InpAccountType){
       case Personal: 
-         if (BelowAbsoluteDrawdownThreshold()) return InpDDScale;
-         if (BelowEquityDrawdownThreshold()) return InpDDScale; // NOT FINAL
-         if (BreachedConsecutiveLossesThreshold()) return InpDDScale;
+         if (IsUnderperforming()) return InpDDScale;
          return 1; 
          break;
          
       case Challenge:
-         if (ProfitTargetReached()) return InpLiveScale; 
-         if (BelowAbsoluteDrawdownThreshold()) return InpChallDDScale;
-         if (BelowEquityDrawdownThreshold()) return InpChallDDScale;
-         if (BreachedConsecutiveLossesThreshold()) return InpChallDDScale;
-         if (BreachedEquityDrawdownThreshold()) return InpChallDDScale;
+         if (BelowAbsoluteDrawdownThreshold()) {
+            if (!ProfitTargetReached()) return InpChallDDScale;
+            return InpLiveDDScale;
+         }
+         
+         if (ProfitTargetReached() && IsUnderperforming()) return InpLiveDDScale;
+         if (ProfitTargetReached()) return InpLiveScale;
          return InpChallScale;
          break;
          
       case Funded:
-         if (BelowAbsoluteDrawdownThreshold()) return InpLiveDDScale;
-         if (BelowEquityDrawdownThreshold()) return InpLiveDDScale; 
-         if (BreachedConsecutiveLossesThreshold()) return InpLiveDDScale;
+         if (IsUnderperforming()) return InpLiveDDScale;
          return InpLiveScale;
          break;
          
@@ -572,6 +580,15 @@ float CIntervalTrade::RiskScaling(void){
    }
 }
 
+bool CIntervalTrade::IsUnderperforming(void){
+   /*
+   Equity Drawdown: Portfolio in drawdown, balance below equity drawdown threshold
+   Absolute Drawdown: Portfolio in drawdown, balance below absolute drawdown threshold 
+   Consecutive Losses: Portfolio in drawdown, last N consecutive trades are losers. 
+   */
+   if (BelowEquityDrawdownThreshold() || BelowAbsoluteDrawdownThreshold() || BreachedConsecutiveLossesThreshold()) return true;
+   return false;
+}
 
 double CIntervalTrade::CalcTP(int ticket){
    /*
@@ -653,7 +670,7 @@ bool CIntervalTrade::BelowEquityDrawdownThreshold(void){
    
    double equity_threshold = PORTFOLIO.peak_equity * (1 - (threshold / 100));
    
-   if (PORTFOLIO.in_drawdown && ((BreachedConsecutiveLossesThreshold()) || (BreachedEquityDrawdownThreshold())) && (account_balance() < equity_threshold)) return true; 
+   if (PORTFOLIO.in_drawdown && (account_balance() < equity_threshold)) return true; 
    return false;
 }
 
@@ -683,12 +700,24 @@ double CIntervalTrade::EquityDrawdownScaleFactor(void){
 }
 
 bool CIntervalTrade::BreachedConsecutiveLossesThreshold(void){
-   if (PORTFOLIO.last_consecutive_losses < InpMinLoseStreak) return false;
-   return true;
+   //if (PORTFOLIO.last_consecutive_losses < InpMinLoseStreak && !AccountInDrawdown() && !LatestTradeIsLoss()) return false;
+   //return true;
+   if (PORTFOLIO.last_consecutive_losses > InpMinLoseStreak && LatestTradeIsLoss()) return true; 
+   return false;
 }
 
 bool CIntervalTrade::BreachedEquityDrawdownThreshold(void){
    if (PORTFOLIO.current_drawdown_percent < InpEquityDDThresh) return false;
+   return true;
+}
+
+double CIntervalTrade::LatestTradeIsLoss(void){
+   int t = PortfolioLatestTradeTicket();
+   
+   OP_OrderSelectByTicket(t);
+   
+   if (PosProfit() >= 0) return false;
+   Print("LOSS");
    return true;
 }
 // ------------------------------- FUNDED ------------------------------- //
@@ -1161,15 +1190,20 @@ void CIntervalTrade::CheckOrderDeadline(void){
    
    //if (InpAccountType == Challenge && !EquityReachedProfitTarget() && InpTradeMgt == Trailing) return;
    if (InpTradeMgt == OpenTrailing) return;
+   
    int active = NumActivePositions();
+   logger(StringFormat("Checking Order Deadline. %i order/s found.", active));
    for (int i = 0; i < active; i++){
+   
       ActivePosition pos = TRADES_ACTIVE.active_positions[i];
       if (pos.pos_close_deadline > TimeCurrent()) continue;
+      
       if (OrderIsClosed(pos.pos_ticket)) {
          logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool", pos.pos_ticket, NumActivePositions()));
          if (!TicketInPortfolioHistory(pos.pos_ticket)) {
             // check latest data in account history if ticket matches. 
             TradesHistory latest = LastEntry();
+            
             if (pos.pos_ticket == latest.ticket) UpdateHistoryWithLastValue();         
             
             else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, pos.pos_ticket)); 
@@ -1244,6 +1278,7 @@ int CIntervalTrade::TrailStop(void){
    /*
    Iterates through active positions, sets trail stop 
    */
+   
    int active = NumActivePositions();
    
    for (int i = 0; i < active; i++){
@@ -1521,12 +1556,20 @@ int CIntervalTrade::SendMarketOrder(void){
    if (util_market_spread() > RISK_PROFILE.RP_spread) { UpdateCSV("delayed"); }
    
    
-   switch (InpSpreadMgt){
+   /*
+   RETURN CODES 
    
+   -1 - order send failed 
+   -10 - interval bad spread
+   -20 - interval invalid price
+   */
+   
+   switch (InpSpreadMgt){
+      
       case Interval: // interval 
       
-         if (util_market_spread() >= RISK_PROFILE.RP_spread) return -1;
-         if (!DelayedAndValid()) return -1;
+         if (util_market_spread() >= RISK_PROFILE.RP_spread) return -10;
+         if (!DelayedAndValid()) return -20;
          break;
          
       case Recursive: // recursive
@@ -1534,14 +1577,14 @@ int CIntervalTrade::SendMarketOrder(void){
          while (util_market_spread() >= RISK_PROFILE.RP_spread || !DelayedAndValid()){
             Sleep(delay);
             
-            if (TimeCurrent() >= TRADE_QUEUE.curr_trade_close) return -1;
+            if (TimeCurrent() >= TRADE_QUEUE.curr_trade_close) return -30;
          }
          break;
          
       case Ignore: // ignore 
       
-         if (TimeCurrent() > TRADE_QUEUE.curr_trade_open) return -1;
-         if (util_market_spread() >= RISK_PROFILE.RP_spread) return -1;
+         if (TimeCurrent() > TRADE_QUEUE.curr_trade_open) return -40;
+         if (util_market_spread() >= RISK_PROFILE.RP_spread) return -50;
          break; 
          
       default: 
@@ -1568,7 +1611,7 @@ int CIntervalTrade::SendMarketOrder(void){
    SetOrderOpenLogInfo(entry_price, TimeCurrent(), TRADES_ACTIVE.trade_close_datetime, ticket);
    if (!UpdateCSV("open")) { logger("Failed to Write To CSV. Order: OPEN"); }
    
-   return 1;
+   return ticket;
 }
 int CIntervalTrade::WriteToCSV(string data_to_write, string log_type){
    
@@ -1693,6 +1736,11 @@ bool CIntervalTrade::OrderIsClosed(int ticket){
 // ------------------------------- TRADE OPERATIONS ------------------------------- //
 
 
+
+
+// ------------------------------- TRADE OPERATIONS ------------------------------- //
+
+
 // ------------------------------- MQL5 ------------------------------- //
 
 #ifdef __MQL5__ 
@@ -1713,6 +1761,8 @@ double            CIntervalTrade::PosProfit()      { return PositionGetDouble(PO
 ENUM_ORDER_TYPE   CIntervalTrade::PosOrderType()   { return PositionGetInteger(POSITION_TYPE); }
 double            CIntervalTrade::PosSL()          { return PositionGetDouble(POSITION_SL); }
 double            CIntervalTrade::PosTP()          { return PositionGetDouble(POSITION_TP); }
+int               CIntervalTrade::PosHistTotal()   { return HistoryDealsTotal(); }
+double            CIntervalTrade::PosCommission()  { return DealInfo.Commission(); }
 
 
 int CIntervalTrade::OP_OrdersCloseAll(){
@@ -1741,7 +1791,6 @@ int CIntervalTrade::OP_OrdersCloseAll(){
    // close added trades
    int trades_closed = 0;
    for (int i = 0; i < ArraySize(tickets); i++){
-      Print("TICKETS: ", tickets[i]);
       int c = OP_CloseTrade(tickets[i]);
       if (c == -2) {
          logger("Cannot close trade. Trail Stop is set.");
@@ -1762,14 +1811,24 @@ int CIntervalTrade::OP_OrdersCloseAll(){
 int CIntervalTrade::OP_CloseTrade(int ticket){ 
    int t = PositionSelectByTicket(ticket);
    
+   if (!OrderIsClosed(ticket)){
+      logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool.", ticket, NumActivePositions()));
+      if (!TicketInPortfolioHistory(ticket)){
+         // check latest data in account history if ticket matches. 
+         TradesHistory latest = LastEntry();
+         if (ticket == latest.ticket) UpdateHistoryWithLastValue();
+         else logger(StringFormat("Ticket Mismatch. Ltest: %i, Closed: %i", latest.ticket, ticket));
+      }
+      //return 1; 
+   }
+   
    
    ENUM_ORDER_TYPE ord_type = OrderGetInteger(ORDER_TYPE);
    int c = 0;
    switch(ord_type){
       case ORDER_TYPE_BUY:
       case ORDER_TYPE_SELL:
-         // market order
-         if (PositionGetDouble(POSITION_PROFIT) > 0 && InpTradeMgt == Trailing) return -2; // ignores open positions in profit when using trail stop 
+         // market order 
          c = Trade.PositionClose(ticket); // closes positions in loss when using trail stop 
          if (!c) { logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), true);}
          break;
@@ -1788,7 +1847,14 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    SetOrderCloseLogInfo(ClosePrice(), TimeCurrent(), PosTicket());
    
    if (!UpdateCSV("close")) { logger("Failed to write to CSV. Order: CLOSE"); }
-   if (c) { logger(StringFormat("Closed: %i P/L", PosTicket(), PosProfit()), true); }
+   if (c) { 
+      logger(StringFormat("Closed: %i P/L", PosTicket(), PosProfit()), true);
+      if (!TicketInPortfolioHistory(ticket)){
+         int latest_ticket = LastEntry().ticket;
+         if (ticket == latest_ticket) UpdateHistoryWithLastValue();
+         else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest_ticket, ticket));
+      }
+   }
    return c;
 }
 
@@ -1833,17 +1899,11 @@ bool CIntervalTrade::OP_TradeMatch(int index){
    return true;
 }
 
-int CIntervalTrade::OP_OrderSelectByTicket(int ticket){
-   int s = PositionSelectByTicket(ticket);
-   return s;
-}
+int CIntervalTrade::OP_OrderSelectByTicket(int ticket){ return PositionSelectByTicket(ticket); }
 
-int CIntervalTrade::OP_OrderSelectByIndex(int index){
-   int ticket = PositionGetTicket(index);
-   int t = PositionSelectByTicket(ticket);
-   return t;
-}
+int CIntervalTrade::OP_OrderSelectByIndex(int index) { return PositionSelectByTicket(PositionGetTicket(index)); }
 
+int CIntervalTrade::OP_HistorySelectByIndex(int index) { return HistoryDealSelect(HistoryDealGetTicket(index)); }
 int CIntervalTrade::OP_ModifySL(double sl){
    // SELECT THE TICKET PLEASE
    int m = Trade.PositionModify(PosTicket(), sl, PosTP());
@@ -1851,10 +1911,16 @@ int CIntervalTrade::OP_ModifySL(double sl){
    return m;
 }
 
+int CIntervalTrade::OP_ModifyTP(double tp){
+   int m = Trade.PositionModify(PosTicket(), tp, PosTP());
+   if (!m) logger(StringFormat("ERROR MODIFYING TP: %i", GetLastError()));
+   return m;
+}
+
 double CIntervalTrade::account_deposit(void){
    HistorySelect(0, TimeCurrent());
    
-   uint total = HistoryDealsTotal();
+   int total = HistoryDealsTotal();
    
    for (int i = 0; i < total; i++){
       ulong ticket = HistoryDealGetTicket(i);
@@ -1967,9 +2033,11 @@ double CIntervalTrade::util_delayed_entry_reference(void){
 }
 
 
-int CIntervalTrade::logger(string message, bool notify = false){
-   if (!InpTerminalMsg) return -1;
-   Print("LOGGER: ", message);
+int CIntervalTrade::logger(string message, bool notify = false, bool debug = false){
+   if (!InpTerminalMsg && !debug) return -1;
+   
+   string mode = debug ? "DEBUGGER" : "LOGGER";
+   PrintFormat("%s: %s", mode, message);
    
    if (notify) notification(message);
    
@@ -2010,8 +2078,8 @@ double   CIntervalTrade::account_balance(void)        { return AccountInfoDouble
 double   CIntervalTrade::account_equity(void)         { return AccountInfoDouble(ACCOUNT_EQUITY); }
 string   CIntervalTrade::account_server(void)         { return AccountInfoString(ACCOUNT_SERVER); }
 
-double   CIntervalTrade::util_symbol_minlot(void)     { return MarketInfo(Symbol(), MODE_MINLOT); }
-double   CIntervalTrade::util_symbol_maxlot(void)     { return MarketInfo(Symbol(), MODE_MAXLOT); }
+double   CIntervalTrade::util_symbol_minlot(void)     { return SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN); }
+double   CIntervalTrade::util_symbol_maxlot(void)     { return SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MAX); }
 
 double   CIntervalTrade::util_trade_diff(void)        { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points))); }
 double   CIntervalTrade::util_trade_diff_points(void) { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value)); }
@@ -2030,5 +2098,4 @@ int      CIntervalTrade::util_shift_to_entry(void) {
    return shift;
 }
 // ------------------------------- UTILS AND WRAPPERS ------------------------------- //
-
 

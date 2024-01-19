@@ -1,10 +1,4 @@
 // MAIN TRADING CLASS
-#ifdef __MQL5__
-#include <Trade/Trade.mqh>
-CTrade Trade;
-#endif 
-
-
 #include "definition.mqh"
 
 
