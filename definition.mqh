@@ -369,3 +369,4 @@ color DEF_FONT_COLOR = clrWhite;
 // Syntax: <Abbreviation>-<Date Deployed>-<Base Version>
 // DO NOT CHANGE
 const string EA_ID = "LZO-010124-2";
+const string FXFACTORY_DIRECTORY = "lambda_zero_one\\news";
