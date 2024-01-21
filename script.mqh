@@ -11,12 +11,16 @@
 #include "trade_mt5.mqh"
 #endif
 
+#include "forex_factory.mqh"
 #include "app.mqh"
 #include "loader.mqh"
+#include <B63/newscheck.mqh>
 
 CIntervalTrade interval_trade;
 CIntervalApp interval_app(interval_trade, UI_X, UI_Y, UI_WIDTH, UI_HEIGHT);
 CLoader loader;
+CNewsEvents news_events;
+
 
 
 
@@ -41,6 +45,16 @@ int OnInit()
    interval_app.InitializeUIElements();
    // DRAW UI HERE
    
+   //int num_news_events = news_events.FetchData();
+   
+   //if (num_news_events == -1) interval_trade.logger("Error fetching news data.");
+   //else interval_trade.logger(StringFormat("%i events fetched.", num_news_events));
+   
+   int num_news_data = news_events.FetchData();
+   PrintFormat("%i events added", num_news_data);
+   
+   PrintFormat("High Impact News Today: %s", (string) news_events.HighImpactNewsToday());
+   //print_stuff();
    //Print("NEWS DATE: ", loader.IsNewsDate());
    //interval_trade.InitHistory();
    // add provision to check for open orders, in case ea gets deactivated
@@ -157,3 +171,17 @@ void OnChartEvent(const int id, const long &lparam, const double &daram, const s
    }
 }
 //+------------------------------------------------------------------+
+
+void print_stuff(){
+   Print("datetime: ", __DATETIME__);
+   Print("date: ", __DATE__);
+   Print("file: ", __FILE__);
+   Print("funcsig: ", __FUNCSIG__);
+   Print("function: ", __FUNCTION__);
+   Print("line: ", __LINE__);
+   Print("mql4 build: ", __MQL4BUILD__);
+   Print("mql4: ", __MQL4__);
+   Print("mql: ", __MQL__);
+   Print("path: ", __PATH__);
+   
+}

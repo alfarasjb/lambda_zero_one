@@ -67,7 +67,6 @@ int CLoader::LoadFromFile(void){
 }
 
 datetime CLoader::StringToDate(string date_string){
-   Print(date_string);
    string components[];
    int date_split = (int)StringSplit(date_string, StringGetCharacter("/", 0), components);
    

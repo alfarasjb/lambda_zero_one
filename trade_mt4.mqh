@@ -147,6 +147,7 @@ class CIntervalTrade{
       double            util_trade_diff_points();
       double            util_symbol_minlot();
       double            util_symbol_maxlot();
+      double            util_comm_adj_diff();
       
       
       double            account_balance();
@@ -705,7 +706,6 @@ double CIntervalTrade::LatestTradeIsLoss(void){
    OP_OrderSelectByTicket(t);
    
    if (PosProfit() >= 0) return false;
-   Print("LOSS");
    return true;
 }
 // ------------------------------- FUNDED ------------------------------- //
@@ -1437,7 +1437,7 @@ int CIntervalTrade::SetBreakeven(void){
    Iterates through active positions, and modifies SL to order open price - breakeven
    */
 
-   if (InpTradeMgt == Trailing) return 0;
+   //if (InpTradeMgt == Trailing) return 0;
    
    int active = NumActivePositions();
    
@@ -1447,7 +1447,21 @@ int CIntervalTrade::SetBreakeven(void){
       
       if (PosProfit() < 0) continue;
       int s = OP_OrderSelectByTicket(ticket);
-      int c = OP_ModifySL(PosOpenPrice());
+      ENUM_ORDER_TYPE position_order_type = PosOrderType();
+      
+      double breakeven_price; 
+      switch (position_order_type) {
+         case ORDER_TYPE_BUY: 
+            breakeven_price = PosOpenPrice() + util_comm_adj_diff();
+            break; 
+         case ORDER_TYPE_SELL:
+            breakeven_price = PosOpenPrice() - util_comm_adj_diff();
+            break;
+         default:
+            continue;
+      }
+      
+      int c = OP_ModifySL(NormalizeDouble(breakeven_price, 5));
       
    }
    
@@ -2061,6 +2075,7 @@ double   CIntervalTrade::util_symbol_maxlot(void)     { return MarketInfo(Symbol
 double   CIntervalTrade::util_trade_diff(void)        { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points))); }
 double   CIntervalTrade::util_trade_diff_points(void) { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value)); }
 double   CIntervalTrade::ValueAtRisk(void)            { return CalcLot() * util_trade_diff_points(); }
+double   CIntervalTrade::util_comm_adj_diff(void)     { return MathAbs((PosCommission()) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points))); }
 
 int      CIntervalTrade::util_shift_to_entry(void) {
    MqlDateTime target_datetime;
