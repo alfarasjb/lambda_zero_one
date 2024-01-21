@@ -171,17 +171,3 @@ void OnChartEvent(const int id, const long &lparam, const double &daram, const s
    }
 }
 //+------------------------------------------------------------------+
-
-void print_stuff(){
-   Print("datetime: ", __DATETIME__);
-   Print("date: ", __DATE__);
-   Print("file: ", __FILE__);
-   Print("funcsig: ", __FUNCSIG__);
-   Print("function: ", __FUNCTION__);
-   Print("line: ", __LINE__);
-   Print("mql4 build: ", __MQL4BUILD__);
-   Print("mql4: ", __MQL4__);
-   Print("mql: ", __MQL__);
-   Print("path: ", __PATH__);
-   
-}
