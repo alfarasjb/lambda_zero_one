@@ -71,9 +71,9 @@ datetime CLoader::StringToDate(string date_string){
    int date_split = (int)StringSplit(date_string, StringGetCharacter("/", 0), components);
    
    MqlDateTime converted; 
-   converted.year = components[2];
-   converted.mon = components[0];
-   converted.day = components[1];
+   converted.year = (int)components[2];
+   converted.mon = (int)components[0];
+   converted.day = (int)components[1];
    converted.hour = 0;
    converted.min = 0;
    converted.sec = 0;
