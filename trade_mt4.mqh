@@ -15,6 +15,7 @@ class CIntervalTrade{
       // TRADE PARAMETERS
       float       order_lot;
       double      entry_price, sl_price, tp_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot, ACCOUNT_DEPOSIT, ACCOUNT_CUTOFF;
+      int         digits;
       
       // FUNDED 
       double      funded_target_equity, funded_target_usd; 
@@ -33,6 +34,7 @@ class CIntervalTrade{
       double            TICK_VALUE()      { return tick_value; }
       double            TRADE_POINTS()    { return trade_points; }
       double            TRUE_RISK()       { return true_risk; }
+      int               DIGITS()          { return digits; }
       
       
       // TRADE PARAMS
@@ -148,6 +150,8 @@ class CIntervalTrade{
       double            util_symbol_minlot();
       double            util_symbol_maxlot();
       double            util_comm_adj_diff();
+      int               util_symbol_digits();
+      string            util_norm_price(double value);
       
       
       double            account_balance();
@@ -155,9 +159,11 @@ class CIntervalTrade{
       string            account_server();
       double            account_deposit();
       
-      int               logger(string message, bool notify = false, bool debug = false);
+      int               logger(string message, string function, bool notify = false, bool debug = false);
       void              errors(string error_message);
       bool              notification(string message);
+      
+      string            base_func();
       
       
       // HISTORY
@@ -178,6 +184,7 @@ class CIntervalTrade{
       bool              TicketInPortfolioHistory(int ticket);
       bool              AccountInDrawdown();
       double            LatestTradeIsLoss();
+      
 };
 
 
@@ -194,6 +201,7 @@ CIntervalTrade::CIntervalTrade(void){
 void CIntervalTrade::InitializeSymbolProperties(void){
    tick_value = util_tick_val();
    trade_points = util_trade_pts();
+   digits = util_symbol_digits();
 }
 
 
@@ -225,6 +233,8 @@ void CIntervalTrade::InitHistory(void){
    
    Mainly used for scaling down on losing streaks. 
    */
+   
+   ClearHistory();
 
    int num_history = PosHistTotal();
    //int year = 2024;
@@ -286,10 +296,10 @@ void CIntervalTrade::InitHistory(void){
    PORTFOLIO.max_drawdown_percent = max_drawdown_pct;
    PORTFOLIO.data_points = PortfolioHistorySize();
    
-   logger(StringFormat("Initialized History. %i data points found.", PORTFOLIO.data_points));
-   logger(StringFormat("Drawdown: %i, DD Percent: %f, Losing Streak: %i, Last Consecutive: %i, Peak: %f, Current: %f", 
+   logger(StringFormat("Initialized History. %i data points found.", PORTFOLIO.data_points), __FUNCTION__);
+   logger(StringFormat("Drawdown: %i, DD Percent: %.2f, Losing Streak: %i, Last Consecutive: %i, Peak: %.2f, Current: %.2f",
       PORTFOLIO.in_drawdown, PORTFOLIO.current_drawdown_percent, PORTFOLIO.is_losing_streak, PORTFOLIO.last_consecutive_losses,
-      PORTFOLIO.peak_equity, account_balance()));
+      PORTFOLIO.peak_equity, account_balance()), __FUNCTION__);
 }
 
 
@@ -447,11 +457,11 @@ void CIntervalTrade::UpdateHistoryWithLastValue(void){
    
    
    
-   logger(StringFormat("Updated History. Latest: %i", PortfolioLatestTradeTicket()));
+   logger(StringFormat("Updated History. Latest: %i", PortfolioLatestTradeTicket()), __FUNCTION__);
    
-   logger(StringFormat("Drawdown: %i, DD Percent: %f, Losing Streak: %i, Last Consecutive: %i, Peak: %f, Current: %f", 
+   logger(StringFormat("Drawdown: %i, DD Percent: %.2f, Losing Streak: %i, Last Consecutive: %i, Peak: %.2f, Current: %.2f", 
       PORTFOLIO.in_drawdown, PORTFOLIO.current_drawdown_percent, PORTFOLIO.is_losing_streak, PORTFOLIO.last_consecutive_losses,
-      PORTFOLIO.peak_equity, account_balance()));
+      PORTFOLIO.peak_equity, account_balance()), __FUNCTION__);
 }
 
 int CIntervalTrade::AppendToHistory(TradesHistory &history){
@@ -791,7 +801,7 @@ double CIntervalTrade::SetChallengeAccountTakeProfit(){
       double take_profit_price = EvaluationPhase() ? (entry_price + (tp_points * factor)) : 0;
       
       int m = OP_ModifyTP(take_profit_price);
-      if (m) logger(StringFormat("Modified Take Profit for Ticket: %i", ticket), true);
+      if (m) logger(StringFormat("Modified Take Profit for Ticket: %i", ticket), __FUNCTION__, true);
    }
    
    return 0;   
@@ -872,8 +882,7 @@ void CIntervalTrade::SetDelayedEntry(double price){
    /*
    Sets delayed entry reference price when spreads are too wide
    */
-   logger(StringFormat("Last Open: %f", util_delayed_entry_reference()));
-   logger(StringFormat("Set Delayed Entry Reference Price: %f, Spread: %f", price, util_market_spread()), true);
+   logger(StringFormat("Last Open: %s, Set Delayed Entry Reference Price: %s, Spread: %f", util_norm_price(util_entry_candle_open()), util_norm_price(price), util_market_spread()), __FUNCTION__, true);
    
    delayed_entry_reference = price;
 }
@@ -906,7 +915,7 @@ bool CIntervalTrade::DelayedEntryPriceValid(){
          break;
          
    }
-   if (valid) logger(StringFormat("Delayed Entry Valid: %i, Reference: %f, Entry: %f", valid, delayed_entry_reference, entry_price));
+   if (valid) logger(StringFormat("Delayed Entry Valid: %i, Reference: %s, Entry: %s", valid, util_norm_price(delayed_entry_reference), util_norm_price(entry_price)), __FUNCTION__);
    
    return valid;
 }
@@ -1074,7 +1083,7 @@ void CIntervalTrade::AppendActivePosition(ActivePosition &active_pos){
    int arr_size = ArraySize(TRADES_ACTIVE.active_positions);
    ArrayResize(TRADES_ACTIVE.active_positions, arr_size + 1);
    TRADES_ACTIVE.active_positions[arr_size] = active_pos;
-   logger(StringFormat("Updated active positions: %i, Ticket: %i", NumActivePositions(), active_pos.pos_ticket));
+   logger(StringFormat("Updated active positions: %i, Ticket: %i", NumActivePositions(), active_pos.pos_ticket), __FUNCTION__);
 }
 
 
@@ -1180,21 +1189,24 @@ void CIntervalTrade::CheckOrderDeadline(void){
    if (InpTradeMgt == OpenTrailing) return;
    
    int active = NumActivePositions();
-   logger(StringFormat("Checking Order Deadline. %i order/s found.", active));
+   if (active == 0) return;
+   
+   logger(StringFormat("Checking Order Deadline. %i order/s found.", active), __FUNCTION__);
+   
    for (int i = 0; i < active; i++){
    
       ActivePosition pos = TRADES_ACTIVE.active_positions[i];
       if (pos.pos_close_deadline > TimeCurrent()) continue;
       
       if (OrderIsClosed(pos.pos_ticket)) {
-         logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool", pos.pos_ticket, NumActivePositions()));
+         logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool", pos.pos_ticket, NumActivePositions()), __FUNCTION__);
          if (!TicketInPortfolioHistory(pos.pos_ticket)) {
             // check latest data in account history if ticket matches. 
             TradesHistory latest = LastEntry();
             
             if (pos.pos_ticket == latest.ticket) UpdateHistoryWithLastValue();         
             
-            else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, pos.pos_ticket)); 
+            else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, pos.pos_ticket), __FUNCTION__); 
          }
          continue;
       }
@@ -1322,10 +1334,10 @@ int CIntervalTrade::TrailStop(void){
       c = OP_ModifySL(updated_sl);
       
       if (c) {
-         logger(StringFormat("Trail Stop Updated. Ticket: %i", ticket), true);
+         logger(StringFormat("Trail Stop Updated. Ticket: %i", ticket), __FUNCTION__, true);
          return 1;
       }
-      else logger(StringFormat("ERROR UPDATING SL: %i CURRENT: %f, TARGET: %f", GetLastError(), current_sl, updated_sl));
+      else logger(StringFormat("ERROR UPDATING SL: %i CURRENT: %s, TARGET: %s", GetLastError(), util_norm_price(current_sl), util_norm_price(updated_sl)), __FUNCTION__);
    }
    
    return 1;
@@ -1422,7 +1434,7 @@ int CIntervalTrade::TrailStopsOnClose(void){
          }
          c = OP_ModifySL(updated_sl);
          if (c) {
-            logger(StringFormat("Trail Stop Updated. Ticket: %i", ticket), true);
+            logger(StringFormat("Trail Stop Updated. Ticket: %i", ticket), __FUNCTION__, true);
             num_trailed_positions++;
          }
          
@@ -1516,7 +1528,7 @@ int CIntervalTrade::SendLimitOrder(void){
    ENUM_ORDER_TYPE order_type = util_pending_ord_type();
    double pending_entry_price = iOpen(Symbol(), PERIOD_CURRENT, 0);
    int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), pending_entry_price, sl_price, 0);
-   if (ticket == -1) logger("Trade Failed");
+   if (ticket == -1) logger("Trade Failed", __FUNCTION__);
    SetTradeOpenDatetime(TimeCurrent(), ticket);
    
    ActivePosition ea_pos;
@@ -1527,7 +1539,7 @@ int CIntervalTrade::SendLimitOrder(void){
    
    // trigger an order open log containing order open price, entry time, target close time, and spread at the time of the order
    SetOrderOpenLogInfo(pending_entry_price, TimeCurrent(), TRADES_ACTIVE.trade_close_datetime, ticket);
-   if (!UpdateCSV("open")) { logger("Failed to Write To CSV. Order: OPEN"); }
+   if (!UpdateCSV("open")) { logger("Failed to Write To CSV. Order: OPEN", __FUNCTION__); }
    
    return 1; 
 }
@@ -1596,7 +1608,7 @@ int CIntervalTrade::SendMarketOrder(void){
    
    
    int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), entry_price, sl_price, tp_price);
-   if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()), true);
+   if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()), __FUNCTION__, true);
    SetTradeOpenDatetime(TimeCurrent(), ticket);
    
    ActivePosition ea_pos;
@@ -1610,7 +1622,7 @@ int CIntervalTrade::SendMarketOrder(void){
    
    SetChallengeAccountTakeProfit();
    SetOrderOpenLogInfo(entry_price, TimeCurrent(), TRADES_ACTIVE.trade_close_datetime, ticket);
-   if (!UpdateCSV("open")) { logger("Failed to Write To CSV. Order: OPEN"); }
+   if (!UpdateCSV("open")) { logger("Failed to Write To CSV. Order: OPEN", __FUNCTION__); }
    
    return ticket;
 }
@@ -1644,7 +1656,7 @@ bool CIntervalTrade::UpdateCSV(string log_type){
    
    if (!InpLogging) return true; // return if csv logging is disabled
    
-   logger(StringFormat("Update CSV: %s", log_type));
+   logger(StringFormat("Update CSV: %s", log_type), __FUNCTION__);
    
    string csv_message = "";
    datetime current = TimeCurrent();
@@ -1666,8 +1678,8 @@ bool CIntervalTrade::UpdateCSV(string log_type){
    
    if (WriteToCSV(csv_message, log_type) == -1){
    
-      logger(StringFormat("Failed To Write to CSV. %i", GetLastError()));
-      logger(StringFormat("MESSAGE: %s", csv_message));
+      logger(StringFormat("Failed To Write to CSV. %i", GetLastError()), __FUNCTION__);
+      logger(StringFormat("MESSAGE: %s", csv_message), __FUNCTION__);
       return false;
    }
    
@@ -1686,7 +1698,7 @@ bool CIntervalTrade::MinimumEquity(void){
    double account_equity = AccountInfoDouble(ACCOUNT_EQUITY);
    
    if (account_equity < ACCOUNT_CUTOFF) {
-      logger(StringFormat("TRADING DISABLED. Account Equity is below Minimum Trading Requirement. Current Equity: %f, Required: %f", account_equity, ACCOUNT_CUTOFF));
+      logger(StringFormat("TRADING DISABLED. Account Equity is below Minimum Trading Requirement. Current Equity: %.2f, Required: %.2f", account_equity, ACCOUNT_CUTOFF), __FUNCTION__);
       return false;
    }
    
@@ -1793,13 +1805,13 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    
    int t = OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES);
    if (OrderIsClosed(ticket)) {
-         logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool.", ticket, NumActivePositions()));
+         logger(StringFormat("Order Ticket: %i is already closed. %i Positions in Order Pool.", ticket, NumActivePositions()), __FUNCTION__);
          if (!TicketInPortfolioHistory(ticket)) {
             // check latest data in account history if ticket matches. 
             TradesHistory latest = LastEntry();
             if (ticket == latest.ticket) UpdateHistoryWithLastValue();         
             
-            else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, ticket)); 
+            else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, ticket), __FUNCTION__); 
          }
          return 1;
    }
@@ -1816,14 +1828,14 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
       case ORDER_TYPE_SELL: 
       
          c = OrderClose(OrderTicket(), PosLots(), ClosePrice(), 3);
-         if (!c) logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), true);
+         if (!c) logger(StringFormat("ORDER CLOSE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), __FUNCTION__, true);
          break;
          
       case ORDER_TYPE_BUY_LIMIT:
       case ORDER_TYPE_SELL_LIMIT:
       
          c = OrderDelete(OrderTicket());
-         if (!c) logger(StringFormat("ORDER DELETE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()));
+         if (!c) logger(StringFormat("ORDER DELETE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), __FUNCTION__);
          
          break;
          
@@ -1836,15 +1848,15 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    
    SetOrderCloseLogInfo(ClosePrice(), TimeCurrent(), PosTicket());
    
-   if (!UpdateCSV("close")) logger("Failed to write to CSV. Order: CLOSE");
+   if (!UpdateCSV("close")) logger("Failed to write to CSV. Order: CLOSE", __FUNCTION__);
    if (c) {
-      logger(StringFormat("Closed: %i P/L: %f", PosTicket(), PosProfit()), true);
+      logger(StringFormat("Closed: %i P/L: %.2f", PosTicket(), PosProfit()), __FUNCTION__, true);
       if (!TicketInPortfolioHistory(ticket)) {
          // check latest data in account history if ticket matches. 
          TradesHistory latest = LastEntry();
          if (ticket == latest.ticket) UpdateHistoryWithLastValue();         
          
-         else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, ticket)); 
+         else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, ticket), __FUNCTION__); 
       }
       
    }
@@ -1866,8 +1878,8 @@ int CIntervalTrade::OP_OrderOpen(
    Sends a market order
    */
 
-   logger(StringFormat("ORDER OPEN: Symbol: %s, Ord Type: %s, Vol: %f, Price: %f, SL: %f, TP: %f, Spread: %f, EA ID: %s", 
-      symbol, EnumToString(order_type), volume, price, sl, tp, util_market_spread(), EA_ID), true);
+   logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %.2f, Price: %s, SL: %s, TP: %s, Spread: %f, EA ID: %s", 
+      symbol, EnumToString(order_type), volume, util_norm_price(price), util_norm_price(sl), util_norm_price(tp), util_market_spread(), EA_ID), __FUNCTION__, true);
    int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, tp_price, EA_ID, InpMagic, 0, clrNONE);
    return ticket;
 }
@@ -2024,11 +2036,12 @@ double CIntervalTrade::util_delayed_entry_reference(void){
 }
 
 
-int CIntervalTrade::logger(string message, bool notify = false, bool debug = False){
+int CIntervalTrade::logger(string message, string function, bool notify = false, bool debug = False){
    if (!InpTerminalMsg && !debug) return -1;
    
    string mode = debug ? "DEBUGGER" : "LOGGER";
-   PrintFormat("%s: %s", mode, message);
+   string func = InpDebugLogging ? function : "";
+   PrintFormat("%s - %s: %s", mode, func, message);
    
    if (notify) notification(message);
    
@@ -2045,7 +2058,7 @@ bool CIntervalTrade::notification(string message){
    
    bool n = SendNotification(message);
    
-   if (!n) logger(StringFormat("Failed to Send Notification. Code: %i", GetLastError()));
+   if (!n) logger(StringFormat("Failed to Send Notification. Code: %i", GetLastError()), __FUNCTION__);
    return n;
 }
 
@@ -2055,7 +2068,6 @@ double CIntervalTrade::util_entry_candle_open(void){
 }
 
 void CIntervalTrade::errors(string error_message)     { Print("ERROR: ", error_message); }
-
 double   CIntervalTrade::util_price_ask(void)         { return SymbolInfoDouble(Symbol(), SYMBOL_ASK); }
 double   CIntervalTrade::util_price_bid(void)         { return SymbolInfoDouble(Symbol(), SYMBOL_BID); }
 
@@ -2076,6 +2088,13 @@ double   CIntervalTrade::util_trade_diff(void)        { return ((RISK_PROFILE.RP
 double   CIntervalTrade::util_trade_diff_points(void) { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value)); }
 double   CIntervalTrade::ValueAtRisk(void)            { return CalcLot() * util_trade_diff_points(); }
 double   CIntervalTrade::util_comm_adj_diff(void)     { return MathAbs((PosCommission()) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points))); }
+int      CIntervalTrade::util_symbol_digits(void)     { return (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS); }
+
+string  CIntervalTrade::util_norm_price(double value) { 
+
+   string format_string = StringFormat("%%.%df", digits);
+   return StringFormat(format_string, value);
+}
 
 int      CIntervalTrade::util_shift_to_entry(void) {
    MqlDateTime target_datetime;

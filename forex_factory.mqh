@@ -12,40 +12,52 @@ class CNewsEvents{
    public:
       
       SFFEvent    NEWS_CURRENT[], NEWS_TODAY[], NEWS_SYMBOL_TODAY[];
-      
+      int         FILE_HANDLE;
       
       CNewsEvents();
-      ~CNewsEvents() {};
+      ~CNewsEvents();
       
       
-      int      FetchData();
-      int      FetchNewsToday();
-      bool     HighImpactNewsToday();
-      int      NumNews();
-      void     PrintNews();
-      datetime DateToday();
-      void     NextWeek();
-      datetime LatestWeeklyCandle();
+      int         FetchData();
+      int         AppendToNews(SFFEvent &event, SFFEvent &news_data[]);
+      int         DownloadFromForexFactory(string file_name);
+      int         GetNewsSymbolToday();
       
-      int      AppendToNews(SFFEvent &event, SFFEvent &news_data[]);
-      int      DownloadFromForexFactory(string file_name);
-      bool     FileExists(string file_path);
-      datetime GetDate(datetime parse_datetime);
-      int      GetNewsSymbolToday();
-      int      ClearArray(SFFEvent &data[]);
-      bool     DateMatch(datetime target, datetime reference);
-      bool     SymbolMatch(string country);
-      bool     ArrayIsEmpty(SFFEvent &data[]);
+      datetime    DateToday();
+      datetime    LatestWeeklyCandle();
+      datetime    GetDate(datetime parse_datetime);
+      
+      int         ClearArray(SFFEvent &data[]);
+      bool        DateMatch(datetime target, datetime reference);
+      bool        SymbolMatch(string country);
+      bool        ArrayIsEmpty(SFFEvent &data[]);
+      bool        FileExists(string file_path);
+      bool        HighImpactNewsToday();
+      int         NumNews();
+      int         NumNewsToday();
+      int         ClearHandle();
 };
 
 
 CNewsEvents::CNewsEvents(void){
 }
 
+CNewsEvents::~CNewsEvents(void){
+   ClearHandle();
+}
+
+int CNewsEvents::ClearHandle(void){
+   FileClose(FILE_HANDLE);
+   FileFlush(FILE_HANDLE);
+   FILE_HANDLE = 0;
+   return FILE_HANDLE;
+}
 
 int CNewsEvents::FetchData(void){
+
+   ResetLastError();
    ClearArray(NEWS_CURRENT);
-   
+   ClearHandle();
 
    datetime latest = LatestWeeklyCandle(); 
    int delta = (int)(TimeCurrent() - latest); 
@@ -60,10 +72,10 @@ int CNewsEvents::FetchData(void){
    
    
    if (!FileExists(file_path)) {
-      PrintFormat("File %s not found. Downloading from forex factory.", file_path);
-      DownloadFromForexFactory(file_name);
+      PrintFormat("%s: File %s not found. Downloading from forex factory.", __FUNCTION__, file_path);
+      if (DownloadFromForexFactory(file_name) == -1) PrintFormat("%s: Download Failed. Error: %i", __FUNCTION__, GetLastError());
    }
-   else PrintFormat("File %s found", file_path);
+   else PrintFormat("%s: File %s found", __FUNCTION__, file_path);
    
    
    string result[];
@@ -72,12 +84,12 @@ int CNewsEvents::FetchData(void){
    
    int line = 0;
    
-   int handle = FileOpen(file_path, FILE_CSV | FILE_READ | FILE_ANSI, "\n");
-   if (handle == -1) return -1;
+   FILE_HANDLE = FileOpen(file_path, FILE_CSV | FILE_READ | FILE_ANSI, "\n");
+   if (FILE_HANDLE == -1) return -1;
    
-   while (!FileIsLineEnding(handle)){
-      //if (line == 0) continue; 
-      string file_string = FileReadString(handle);
+   while (!FileIsLineEnding(FILE_HANDLE)){
+   
+      string file_string = FileReadString(FILE_HANDLE);
       
       int split = (int)StringSplit(file_string, sep_char, result);
       line++;
@@ -94,7 +106,6 @@ int CNewsEvents::FetchData(void){
       AppendToNews(event, NEWS_CURRENT);
             
    }
-   
    GetNewsSymbolToday();
    return NumNews();
 }
@@ -111,7 +122,6 @@ int CNewsEvents::GetNewsSymbolToday(void){
    // iterate through main dataset and identify symbol and date. 
    
    
-   // check for array size if array ssize of news today is not empty, check the first date if same with today. 
    ClearArray(NEWS_SYMBOL_TODAY);
    int size = NumNews();
    
@@ -147,34 +157,11 @@ int CNewsEvents::DownloadFromForexFactory(string file_name){
    
    delete downloader;
    if (!success) return -1; 
-   
-   //ArrayResize(NEWS_CURRENT, downloader.Count);
-   
-   //for (int i = 0; i < downloader.Count; i++) NEWS_CURRENT[i] = downloader.Events[i];
-   
    return NumNews();
 }
 
-int CNewsEvents::NumNews(void) { return ArraySize(NEWS_CURRENT); }
-
-void CNewsEvents::PrintNews(void){
-   int num_news = NumNews();
-   
-   for (int i = 0; i < num_news; i ++){
-      string title = NEWS_CURRENT[i].title;
-      string impact = NEWS_CURRENT[i].impact;
-      datetime date = NEWS_CURRENT[i].time;
-      PrintFormat("Title: %s", title);
-      PrintFormat("Impact: %s", impact);
-      PrintFormat("Date: %s", TimeToString(date));
-      PrintFormat("Today; %s", TimeToString(DateToday()));
-      break;
-   }
-   
-}
 
 
-datetime CNewsEvents::DateToday(void){ return (GetDate(TimeCurrent())); }
 
 datetime CNewsEvents::GetDate(datetime parse_datetime){
    MqlDateTime dt_struct;
@@ -207,4 +194,7 @@ bool CNewsEvents::ArrayIsEmpty(SFFEvent &data[]){
    return false;
 }
 
-datetime CNewsEvents::LatestWeeklyCandle() { return iTime(Symbol(), PERIOD_W1, 0); }
+datetime    CNewsEvents::LatestWeeklyCandle()      { return iTime(Symbol(), PERIOD_W1, 0); }
+datetime    CNewsEvents::DateToday(void)           { return (GetDate(TimeCurrent())); }
+int         CNewsEvents::NumNews(void)             { return ArraySize(NEWS_CURRENT); }
+int         CNewsEvents::NumNewsToday(void)        { return ArraySize(NEWS_SYMBOL_TODAY); }

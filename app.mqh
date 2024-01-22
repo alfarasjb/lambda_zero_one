@@ -1,7 +1,7 @@
 // UI
 
 #include <B63/ui/CInterface.mqh>
-
+#include "forex_factory.mqh"
 #ifdef __MQL4__
 #include "trade_mt4.mqh"
 #endif
@@ -18,20 +18,22 @@ class CIntervalApp : public CInterface{
       color    THEME_BUTTON_BORDER_COLOR, THEME_FONT_COLOR;
    public: 
       Button   BASE_BUTTONS[];
-      Button   RP_BUTTON, EN_BUTTON, RM_BUTTON, FN_BUTTON, MS_BUTTON, LG_BUTTON, PORT_BUTTON;
+      Button   RP_BUTTON, EN_BUTTON, RM_BUTTON, FN_BUTTON, MS_BUTTON, LG_BUTTON, PORT_BUTTON, NEWS_BUTTON;
+      SFFEvent NEWS_EVENT[];
       
       string   ACTIVE_SUBWINDOW; 
       
-      CIntervalApp(CIntervalTrade &trade, int ui_x, int ui_y, int ui_width, int ui_height);
+      CIntervalApp(CIntervalTrade &trade, CNewsEvents &news, int ui_x, int ui_y, int ui_width, int ui_height);
       ~CIntervalApp(){};
       
       
       
-      Terminal terminal, RP_terminal, EN_terminal, FN_terminal, MS_terminal, LG_terminal, PORT_terminal, RM_terminal;
+      Terminal terminal, RP_terminal, EN_terminal, FN_terminal, MS_terminal, LG_terminal, PORT_terminal, RM_terminal, NEWS_terminal;
       CIntervalTrade TRADE;
+      CNewsEvents    NEWS;
       void     InitializeUIElements();
       void     InitializeSubwindowProperties();
-      void     RefreshClass(CIntervalTrade &trade_class);
+      void     RefreshClass(CIntervalTrade &trade_class, CNewsEvents &news);
       void     DrawRow(string prefix, string base_name, int row_number, string value);
       void     DrawTerminalButton(Button &button, string name, string parent,int x,int y_adjust, string label_name, double width_factor = 1, double height_factor = 1, color button_color = clrGray);
       void     DrawCloseButton();
@@ -43,6 +45,7 @@ class CIntervalApp : public CInterface{
       void     LGSubWindow(string prefix);
       void     PORTSubWindow(string prefix);
       void     RMSubWindow(string prefix);
+      void     NEWSSubWindow(string prefix);
       
       // UTILITIES 
       bool     ObjectIsButton(string name, Button &list[]);
@@ -54,7 +57,7 @@ class CIntervalApp : public CInterface{
       void     EVENT_BUTTON_PRESS(string button_name);
 };
 
-CIntervalApp::CIntervalApp(CIntervalTrade &trade, int ui_x, int ui_y, int ui_width, int ui_height){
+CIntervalApp::CIntervalApp(CIntervalTrade &trade, CNewsEvents &news, int ui_x, int ui_y, int ui_width, int ui_height){
    UI_X = ui_x; 
    UI_Y = ui_y;
    UI_WIDTH = 270;
@@ -69,7 +72,7 @@ CIntervalApp::CIntervalApp(CIntervalTrade &trade, int ui_x, int ui_y, int ui_wid
    
    APP_ROW_1 = UI_Y - 20;
    
-   RefreshClass(trade);
+   RefreshClass(trade, news);
    
    THEME_BUTTON_BORDER_COLOR     = clrGray;
    THEME_FONT_COLOR              = clrWhite;
@@ -77,8 +80,9 @@ CIntervalApp::CIntervalApp(CIntervalTrade &trade, int ui_x, int ui_y, int ui_wid
    InitializeSubwindowProperties();
 }
 
-void CIntervalApp::RefreshClass(CIntervalTrade &trade_class){
+void CIntervalApp::RefreshClass(CIntervalTrade &trade_class, CNewsEvents &news){
    TRADE = trade_class;
+   NEWS = news;
 }
 
 void CIntervalApp::InitializeUIElements(void){
@@ -98,7 +102,8 @@ void CIntervalApp::InitializeUIElements(void){
    DrawTerminalButton(MS_BUTTON, "MS", "BASE", col_1, row_2, "Misc");
    DrawTerminalButton(LG_BUTTON, "LG", "BASE", col_2, row_2, "Logging");
    DrawTerminalButton(PORT_BUTTON, "PORT", "BASE", col_3, row_2, "Portfolio");
-   DrawTerminalButton(RM_BUTTON, "RM", "BASE", col_1, row_3, "Risk Management", 3.125);
+   DrawTerminalButton(RM_BUTTON, "RM", "BASE", col_1, row_3, "Risk Management", 2.0625);
+   DrawTerminalButton(NEWS_BUTTON, "NEWS", "BASE", col_3, row_3, "News");
    
    //RPSubWindow("RP");
    
@@ -248,6 +253,10 @@ void CIntervalApp::EVENT_BUTTON_PRESS(string button_name){
       RMSubWindow(prefix);
       return;
    }
+   if (button_name == NEWS_BUTTON.button_name){
+      NEWSSubWindow(prefix);
+      return;
+   }
 }
 
 void CIntervalApp::RPSubWindow(string prefix){
@@ -389,6 +398,24 @@ void CIntervalApp::RMSubWindow(string prefix){
    DrawRow(prefix, "Equity DD Threshold", 11, InpEquityDDThresh +"%");
    DrawRow(prefix, "History Interval", 12, EnumToString(InpHistInterval));
    DrawRow(prefix, "Consecutive Loss", 13, InpMinLoseStreak + " trades");
+   
+}
+
+void CIntervalApp::NEWSSubWindow(string prefix){
+   
+   string name = SubWindowTerminalName(prefix);
+   string text_label_name = StringFormat("%s_label", prefix);
+   
+   if (UpdateSubwindow(prefix) != prefix) return;
+   UI_SubWindow(NEWS_terminal, name, SW_X, SW_Y, SW_WIDTH, SW_HEIGHT, SW_COLOR);
+   CTextLabel(text_label_name, SW_HEADER_X, SW_HEADER_Y, "High Impact News", SW_HEADER_FONTSIZE);
+   
+   int size = NEWS.GetNewsSymbolToday();
+   //int size = NEWS.NumNews();
+   for (int i = 0; i < size; i ++){
+      SFFEvent news_today = NEWS.NEWS_SYMBOL_TODAY[i]; 
+      DrawRow(prefix, news_today.title, i+1, StringFormat("%s %s", TimeToString(news_today.time), news_today.impact));
+   }
    
 }
 
