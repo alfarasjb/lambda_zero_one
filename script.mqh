@@ -139,6 +139,13 @@ void OnTick()
          interval_trade.ClearOrdersToday();
          
       }
+      if (interval_trade.PreEntry()){
+         interval_trade.logger(StringFormat("Pre-Entry. Risk: %.2f, Lot: %.2f, Max Lot: %.2f",
+            interval_trade.TRUE_RISK(),
+            interval_trade.CalcLot(),
+            InpMaxLot
+         ), __FUNCTION__,true, true);
+      }
          
       interval_trade.ModifyOrder();
       //interval_app.InitializeUIElements();
