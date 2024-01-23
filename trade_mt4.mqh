@@ -882,7 +882,7 @@ void CIntervalTrade::SetDelayedEntry(double price){
    /*
    Sets delayed entry reference price when spreads are too wide
    */
-   logger(StringFormat("Last Open: %s, Set Delayed Entry Reference Price: %s, Spread: %f", util_norm_price(util_entry_candle_open()), util_norm_price(price), util_market_spread()), __FUNCTION__, true);
+   logger(StringFormat("Last Open: %s \nSet Delayed Entry Reference Price: %s \nSpread: %.2f", util_norm_price(util_entry_candle_open()), util_norm_price(price), util_market_spread()), __FUNCTION__, true);
    
    delayed_entry_reference = price;
 }
@@ -1129,8 +1129,11 @@ int CIntervalTrade::RemoveTradeFromPool(int ticket){
 
 void  CIntervalTrade::AddOrderToday(void)       { TRADES_ACTIVE.orders_today++; } // Increments orders today
 void  CIntervalTrade::ClearOrdersToday(void)    { TRADES_ACTIVE.orders_today = 0; } // Sets orders today to 0
-void  CIntervalTrade::ClearPositions(void)      { ArrayFree(TRADES_ACTIVE.active_positions); } // Clears active positions
 int   CIntervalTrade::NumActivePositions(void)  { return ArraySize(TRADES_ACTIVE.active_positions); } // Returns number of positions in the list
+void  CIntervalTrade::ClearPositions(void)      { 
+   ArrayFree(TRADES_ACTIVE.active_positions);
+   ArrayResize(TRADES_ACTIVE.active_positions, 0);
+} // Clears active positions
 
 
 
@@ -1857,7 +1860,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
    
    if (!UpdateCSV("close")) logger("Failed to write to CSV. Order: CLOSE", __FUNCTION__);
    if (c) {
-      logger(StringFormat("Closed: %i P/L: %.2f", PosTicket(), PosProfit()), __FUNCTION__, true);
+      logger(StringFormat("Closed: %i \nP/L: %.2f", PosTicket(), PosProfit()), __FUNCTION__, true);
       if (!TicketInPortfolioHistory(ticket)) {
          // check latest data in account history if ticket matches. 
          TradesHistory latest = LastEntry();
@@ -1885,7 +1888,7 @@ int CIntervalTrade::OP_OrderOpen(
    Sends a market order
    */
 
-   logger(StringFormat("Symbol: %s, Ord Type: %s, Vol: %.2f, Price: %s, SL: %s, TP: %s, Spread: %f, EA ID: %s", 
+   logger(StringFormat("Symbol: %s \nOrder Type: %s \nVolume: %.2f \nPrice: %s \nSL: %s \nTP: %s \nSpread: %.2f \nEA ID: %s", 
       symbol, EnumToString(order_type), volume, util_norm_price(price), util_norm_price(sl), util_norm_price(tp), util_market_spread(), EA_ID), __FUNCTION__, true);
    int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, tp_price, EA_ID, InpMagic, 0, clrNONE);
    return ticket;

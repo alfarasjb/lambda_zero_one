@@ -71,6 +71,15 @@ int OnInit()
       PORTFOLIO.peak_equity, 
       interval_trade.account_balance()), __FUNCTION__, false, InpDebugLogging);
 //---
+
+   interval_trade.logger(StringFormat(
+      "Terminal Status \n\nTrading: %s \nExpert: %s \nConnection: %s",
+      IsTradeAllowed() ? "Enabled" : "Disabled",
+      IsExpertEnabled() ? "Enabled" : "Disabled", 
+      IsConnected() ? "Connected" : "Not Connected"
+   ), __FUNCTION__, true, true);
+   
+   
    return(INIT_SUCCEEDED);
 
   }
@@ -140,7 +149,15 @@ void OnTick()
          
       }
       if (interval_trade.PreEntry()){
-         interval_trade.logger(StringFormat("Pre-Entry. Risk: %.2f, Lot: %.2f, Max Lot: %.2f",
+      
+         interval_trade.logger(StringFormat(
+            "Terminal Status \n\nTrading: %s \nExpert: %s \nConnection: %s",
+            IsTradeAllowed() ? "Enabled" : "Disabled",
+            IsExpertEnabled() ? "Enabled" : "Disabled", 
+            IsConnected() ? "Connected" : "Not Connected"
+         ), __FUNCTION__, true, true);
+         
+         interval_trade.logger(StringFormat("Pre-Entry \n\nRisk: %.2f \nLot: %.2f \nMax Lot: %.2f",
             interval_trade.TRUE_RISK(),
             interval_trade.CalcLot(),
             InpMaxLot
