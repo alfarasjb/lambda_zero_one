@@ -85,7 +85,7 @@ class CIntervalTrade{
       bool              MinimumEquity();
       bool              IsRiskFree(int ticket);
       bool              OrderIsClosed(int ticket);
-      
+      bool              PreEntry();
       
       
       // FUNDED
@@ -1740,6 +1740,13 @@ bool CIntervalTrade::OrderIsClosed(int ticket){
    }
    RemoveTradeFromPool(ticket);
    return true;
+}
+
+bool CIntervalTrade::PreEntry(void){
+   datetime prev_candle = TRADE_QUEUE.curr_trade_open - util_interval_current(); 
+   
+   if (TimeCurrent() >= prev_candle && TimeCurrent() < TRADE_QUEUE.curr_trade_open) return true; 
+   return false; 
 }
 
 // ------------------------------- MAIN ------------------------------- //
