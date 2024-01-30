@@ -2050,8 +2050,8 @@ int CIntervalTrade::logger(string message, string function, bool notify = false,
    if (!InpTerminalMsg && !debug) return -1;
    
    string mode = debug ? "DEBUGGER" : "LOGGER";
-   string func = InpDebugLogging ? function : "";
-   PrintFormat("%s - %s: %s", mode, func, message);
+   string func = InpDebugLogging ? StringFormat(" - %s", function) : "";
+   PrintFormat("%s %s: %s", mode, func, message);
    
    if (notify) notification(message);
    
@@ -2065,7 +2065,7 @@ bool CIntervalTrade::notification(string message){
    // CONSTRUCT MESSAGE 
    
    if (!InpPushNotifs) return false;
-   
+   if (IsTesting()) return false;
    bool n = SendNotification(message);
    
    if (!n) logger(StringFormat("Failed to Send Notification. Code: %i", GetLastError()), __FUNCTION__);

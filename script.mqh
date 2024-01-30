@@ -39,19 +39,27 @@ int OnInit()
    int num_news_data = news_events.FetchData();
    interval_trade.logger(StringFormat("%i news events added. %i events today.", num_news_data, news_events.NumNewsToday()), __FUNCTION__);
    interval_trade.logger(StringFormat("High Impact News Today: %s", (string) news_events.HighImpactNewsToday()), __FUNCTION__);
+   interval_trade.logger(StringFormat("Num High Impact News Today: %i", news_events.GetNewsSymbolToday()), __FUNCTION__);
    
    interval_app.RefreshClass(interval_trade, news_events);
    interval_trade.OrdersEA();
    interval_trade.SetNextTradeWindow();
-   interval_app.InitializeUIElements();
+   
    // DRAW UI HERE
    
+   int events_in_window = news_events.GetHighImpactNewsInEntryWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
+   
+   
+            
+   interval_trade.logger(StringFormat("Events In Window: %i", news_events.NumNewsInWindow()), __FUNCTION__);
    /*
    INIT INFO: 
    Symbol Properties 
    Risk Properties
    History 
    */
+   
+   interval_app.InitializeUIElements();
    interval_trade.logger(StringFormat("Symbol Properties | Tick Value: %.2f, Trade Points: %s", interval_trade.tick_value, interval_trade.util_norm_price(interval_trade.trade_points)), __FUNCTION__);
    
    interval_trade.logger(StringFormat("Sizing | Lot: %.2f, VAR: %.2f, Risk Scaling: %.2f, In Drawdown: %s", 
@@ -79,6 +87,10 @@ int OnInit()
       IsConnected() ? "Connected" : "Not Connected"
    ), __FUNCTION__, true, true);
    
+   interval_trade.logger(StringFormat("Entry Window: %s - %s \nNum Events: %i",
+            TimeToString(TRADE_QUEUE.curr_trade_open),
+            TimeToString(TRADE_QUEUE.curr_trade_close),
+            events_in_window), __FUNCTION__, true, true);
    
    return(INIT_SUCCEEDED);
 
@@ -116,7 +128,7 @@ void OnDeinit(const int reason)
 void OnTick()
   {
    if (IsNewCandle() && interval_trade.CorrectPeriod() && interval_trade.MinimumEquity()){
-      if (interval_trade.ValidTradeOpen() && !loader.IsNewsDate()){
+      if (interval_trade.ValidTradeOpen() && !loader.IsNewsDate() && !news_events.HighImpactNewsInEntryWindow()){
          
          // sends market order
          int order_send_result = interval_trade.SendMarketOrder();
@@ -146,7 +158,11 @@ void OnTick()
       }
       if (interval_trade.IsNewDay()) { 
          interval_trade.ClearOrdersToday();
-         
+         int events_in_window = news_events.GetHighImpactNewsInEntryWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
+         interval_trade.logger(StringFormat("Entry Window: %s - %s, Num Events: %i",
+            TimeToString(TRADE_QUEUE.curr_trade_open),
+            TimeToString(TRADE_QUEUE.curr_trade_close),
+            events_in_window), __FUNCTION__);
       }
       if (interval_trade.PreEntry()){
       
@@ -162,6 +178,11 @@ void OnTick()
             interval_trade.CalcLot(),
             InpMaxLot
          ), __FUNCTION__,true, true);
+         
+         interval_trade.logger(StringFormat("High Impact News Today: %s \nNum News Today: %i",
+            (string)news_events.HighImpactNewsToday(), 
+            news_events.GetNewsSymbolToday()
+            ), __FUNCTION__, true, true);
       }
          
       interval_trade.ModifyOrder();
