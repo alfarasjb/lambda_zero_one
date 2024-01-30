@@ -410,10 +410,11 @@ void CIntervalApp::NEWSSubWindow(string prefix){
    UI_SubWindow(NEWS_terminal, name, SW_X, SW_Y, SW_WIDTH, SW_HEIGHT, SW_COLOR);
    CTextLabel(text_label_name, SW_HEADER_X, SW_HEADER_Y, "High Impact News", SW_HEADER_FONTSIZE);
    
-   int size = NEWS.GetNewsSymbolToday();
+   //int size = NEWS.GetNewsSymbolToday();
    //int size = NEWS.NumNews();
+   int size = NEWS.GetHighImpactNewsInEntryWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
    for (int i = 0; i < size; i ++){
-      SFFEvent news_today = NEWS.NEWS_SYMBOL_TODAY[i]; 
+      SFFEvent news_today = NEWS.NEWS_IN_TRADING_WINDOW[i]; 
       DrawRow(prefix, news_today.title, i+1, StringFormat("%s %s", TimeToString(news_today.time), news_today.impact));
    }
    
