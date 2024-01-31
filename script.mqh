@@ -128,16 +128,30 @@ void OnDeinit(const int reason)
 void OnTick()
   {
    if (IsNewCandle() && interval_trade.CorrectPeriod() && interval_trade.MinimumEquity()){
-      if (interval_trade.ValidTradeOpen() && !loader.IsNewsDate() && !news_events.HighImpactNewsInEntryWindow()){
+      
+      
+      bool ValidTradeOpen = interval_trade.ValidTradeOpen();
+      
+      //interval_trade.logger(StringFormat("Valid Trade Open: %s", (string)ValidTradeOpen), __FUNCTION__, false, true);
+      
+      if (ValidTradeOpen){
+            
+         bool EventsInEntryWindow = news_events.HighImpactNewsInEntryWindow(); 
+         bool IsNewsDate = loader.IsNewsDate();
          
-         // sends market order
-         int order_send_result = interval_trade.SendMarketOrder();
+         interval_trade.logger(StringFormat("High Impact News in Entry Window: %s, Is News Date: %s", (string)EventsInEntryWindow, (string)IsNewsDate), __FUNCTION__);
          
-         if (order_send_result < 0) interval_trade.logger(StringFormat("Order Send Failed. Configuration: %s, Reason: %s, Code: %i", 
-            EnumToString(InpSpreadMgt), 
-            EnumToString((EnumOrderSendError)order_send_result), 
-            order_send_result), __FUNCTION__);       
-
+         if (!IsNewsDate && !EventsInEntryWindow){
+            
+            // sends market order
+            int order_send_result = interval_trade.SendMarketOrder();
+            
+            if (order_send_result < 0) interval_trade.logger(StringFormat("Order Send Failed. Configuration: %s, Reason: %s, Code: %i", 
+               EnumToString(InpSpreadMgt), 
+               EnumToString((EnumOrderSendError)order_send_result), 
+               order_send_result), __FUNCTION__);       
+   
+         }
       }
       else{
          if (interval_trade.EquityReachedProfitTarget() && InpAccountType != Personal) {
@@ -158,31 +172,18 @@ void OnTick()
       }
       if (interval_trade.IsNewDay()) { 
          interval_trade.ClearOrdersToday();
-         int events_in_window = news_events.GetHighImpactNewsInEntryWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
-         interval_trade.logger(StringFormat("Entry Window: %s - %s, Num Events: %i",
-            TimeToString(TRADE_QUEUE.curr_trade_open),
-            TimeToString(TRADE_QUEUE.curr_trade_close),
-            events_in_window), __FUNCTION__);
+         //EventsInWindow();
+         
       }
       if (interval_trade.PreEntry()){
-      
-         interval_trade.logger(StringFormat(
-            "Terminal Status \n\nTrading: %s \nExpert: %s \nConnection: %s",
-            IsTradeAllowed() ? "Enabled" : "Disabled",
-            IsExpertEnabled() ? "Enabled" : "Disabled", 
-            IsConnected() ? "Connected" : "Not Connected"
-         ), __FUNCTION__, true, true);
          
-         interval_trade.logger(StringFormat("Pre-Entry \n\nRisk: %.2f \nLot: %.2f \nMax Lot: %.2f",
-            interval_trade.TRUE_RISK(),
-            interval_trade.CalcLot(),
-            InpMaxLot
-         ), __FUNCTION__,true, true);
+         TerminalStatus();
          
-         interval_trade.logger(StringFormat("High Impact News Today: %s \nNum News Today: %i",
-            (string)news_events.HighImpactNewsToday(), 
-            news_events.GetNewsSymbolToday()
-            ), __FUNCTION__, true, true);
+         LotsStatus();
+         
+         EventsSymbolToday();
+            
+         EventsInWindow();
       }
          
       interval_trade.ModifyOrder();
@@ -201,3 +202,37 @@ void OnChartEvent(const int id, const long &lparam, const double &daram, const s
 }
 //+------------------------------------------------------------------+
 
+
+// ======== MISC LOGS ======== // 
+
+void LotsStatus(){
+   interval_trade.logger(StringFormat("Pre-Entry \n\nRisk: %.2f \nLot: %.2f \nMax Lot: %.2f",
+      interval_trade.TRUE_RISK(),
+      interval_trade.CalcLot(),
+      InpMaxLot
+   ), __FUNCTION__,true, true);   
+}
+
+void TerminalStatus(){
+   interval_trade.logger(StringFormat(
+      "Terminal Status \n\nTrading: %s \nExpert: %s \nConnection: %s",
+      IsTradeAllowed() ? "Enabled" : "Disabled",
+      IsExpertEnabled() ? "Enabled" : "Disabled", 
+      IsConnected() ? "Connected" : "Not Connected"
+      ), __FUNCTION__, true, true);   
+}
+
+void EventsSymbolToday(){
+   interval_trade.logger(StringFormat("High Impact News Today: %s \nNum News Today: %i",
+      (string)news_events.HighImpactNewsToday(), 
+      news_events.GetNewsSymbolToday()
+      ), __FUNCTION__, false, true);
+}
+
+void EventsInWindow(){
+   int events_in_window = news_events.GetHighImpactNewsInEntryWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
+   interval_trade.logger(StringFormat("Entry Window: %s - %s, Num Events: %i",
+      TimeToString(TRADE_QUEUE.curr_trade_open),
+      TimeToString(TRADE_QUEUE.curr_trade_close),
+      events_in_window), __FUNCTION__, true, true);
+}
