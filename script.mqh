@@ -2,7 +2,8 @@
 
 
 #include <B63/Generic.mqh>
-
+#include <B63/CExport.mqh>
+CExport export_hist("lambda_zero_one");
 #ifdef __MQL4__
 #include "trade_mt4.mqh"
 #endif 
@@ -23,6 +24,7 @@ CIntervalApp interval_app(interval_trade, news_events, UI_X, UI_Y, UI_WIDTH, UI_
 
 
 
+
 int OnInit()
   {
 //---
@@ -30,11 +32,13 @@ int OnInit()
    Trade.SetExpertMagicNumber(InpMagic);
    #endif 
    
+   
    if (InpMode == MODE_BACKTEST) interval_trade.logger(StringFormat("Num Dates Loaded: %i", loader.LoadFromFile()), __FUNCTION__, false, InpDebugLogging);
    interval_trade.InitializeSymbolProperties();
    interval_trade.InitHistory();
    interval_trade.SetRiskProfile();
    interval_trade.SetFundedProfile();
+   interval_trade.UpdateAccounts();
    //set_deadline();
    int num_news_data = news_events.FetchData();
    interval_trade.logger(StringFormat("%i news events added. %i events today.", num_news_data, news_events.NumNewsToday()), __FUNCTION__);
@@ -92,6 +96,13 @@ int OnInit()
             TimeToString(TRADE_QUEUE.curr_trade_close),
             events_in_window), __FUNCTION__, true, true);
    
+   Accounts(true);
+   
+   interval_trade.LastEntry();
+   
+   
+   interval_trade.BrokerCommission();
+   Print("COMM: ", interval_trade.CalcCommission());
    return(INIT_SUCCEEDED);
 
   }
@@ -119,9 +130,7 @@ void OnDeinit(const int reason)
       interval_trade.account_balance()), __FUNCTION__, false, InpDebugLogging);
       
    interval_trade.ClearHistory();
-  
-   
-
+  if (IsTesting()) export_hist.ExportAccountHistory();
   }
   
   
@@ -184,12 +193,16 @@ void OnTick()
          EventsSymbolToday();
             
          EventsInWindow();
+         
+         Accounts(true);
       }
          
       interval_trade.ModifyOrder();
       //interval_app.InitializeUIElements();
+      
+      // UPDATE ACCOUNTS HERE 
+      interval_trade.UpdateAccounts();
    }
-   
   }
   
   
@@ -236,3 +249,22 @@ void EventsInWindow(){
       TimeToString(TRADE_QUEUE.curr_trade_close),
       events_in_window), __FUNCTION__, true, true);
 }
+
+
+void Accounts(bool notify = false){
+   interval_trade.UpdateAccounts();
+   
+   interval_trade.logger(StringFormat("Balance: %s \nProfit: %s \nRemaining: %s", 
+      DoubleToString(interval_trade.account_balance(), 2), 
+      DoubleToString(interval_trade.ACCOUNT_GAIN, 2),
+      DoubleToString(interval_trade.FUNDED_REMAINING_TARGET, 2)), __FUNCTION__, notify, notify);
+}
+
+/*
+VIEW: 
+
+Lot calculation 
+Points to target
+Remaining target
+
+*/

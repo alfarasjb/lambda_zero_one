@@ -18,7 +18,7 @@ class CIntervalApp : public CInterface{
       color    THEME_BUTTON_BORDER_COLOR, THEME_FONT_COLOR;
    public: 
       Button   BASE_BUTTONS[];
-      Button   RP_BUTTON, EN_BUTTON, RM_BUTTON, FN_BUTTON, MS_BUTTON, LG_BUTTON, PORT_BUTTON, NEWS_BUTTON;
+      Button   RP_BUTTON, EN_BUTTON, RM_BUTTON, FN_BUTTON, MS_BUTTON, LG_BUTTON, PORT_BUTTON, NEWS_BUTTON, TARGETS_BUTTON, ACC_BUTTON;
       SFFEvent NEWS_EVENT[];
       
       string   ACTIVE_SUBWINDOW; 
@@ -28,7 +28,7 @@ class CIntervalApp : public CInterface{
       
       
       
-      Terminal terminal, RP_terminal, EN_terminal, FN_terminal, MS_terminal, LG_terminal, PORT_terminal, RM_terminal, NEWS_terminal;
+      Terminal terminal, RP_terminal, EN_terminal, FN_terminal, MS_terminal, LG_terminal, PORT_terminal, RM_terminal, NEWS_terminal, ACC_terminal, TARG_terminal;
       CIntervalTrade TRADE;
       CNewsEvents    NEWS;
       void     InitializeUIElements();
@@ -46,6 +46,8 @@ class CIntervalApp : public CInterface{
       void     PORTSubWindow(string prefix);
       void     RMSubWindow(string prefix);
       void     NEWSSubWindow(string prefix);
+      void     ACCSubWindow(string prefix);
+      void     TARGSubWindow(string prefix);
       
       // UTILITIES 
       bool     ObjectIsButton(string name, Button &list[]);
@@ -95,15 +97,21 @@ void CIntervalApp::InitializeUIElements(void){
    int row_1 = 30;
    int row_2 = 58;
    int row_3 = 86;
+   int row_4 = 114;
    
    DrawTerminalButton(RP_BUTTON, "RP", "BASE", col_1, row_1, "Profile");
    DrawTerminalButton(EN_BUTTON, "EN", "BASE", col_2, row_1, "Entries");
-   DrawTerminalButton(FN_BUTTON, "FN", "BASE", col_3, row_1, "Funded");
+   
    DrawTerminalButton(MS_BUTTON, "MS", "BASE", col_1, row_2, "Misc");
    DrawTerminalButton(LG_BUTTON, "LG", "BASE", col_2, row_2, "Logging");
    DrawTerminalButton(PORT_BUTTON, "PORT", "BASE", col_3, row_2, "Portfolio");
-   DrawTerminalButton(RM_BUTTON, "RM", "BASE", col_1, row_3, "Risk Management", 2.0625);
-   DrawTerminalButton(NEWS_BUTTON, "NEWS", "BASE", col_3, row_3, "News");
+   
+   DrawTerminalButton(ACC_BUTTON, "ACC", "BASE", col_1, row_3, "Accounts");
+   DrawTerminalButton(FN_BUTTON, "FN", "BASE", col_2, row_3, "Funded");
+   DrawTerminalButton(TARGETS_BUTTON, "TARG", "BASE", col_3, row_3, "Targets");
+   
+   DrawTerminalButton(RM_BUTTON, "RM", "BASE", col_1, row_4, "Risk Management", 2.0625);
+   DrawTerminalButton(NEWS_BUTTON, "NEWS", "BASE", col_3, row_4, "News");
    
    //RPSubWindow("RP");
    
@@ -112,7 +120,7 @@ void CIntervalApp::InitializeUIElements(void){
 
 void CIntervalApp::InitializeSubwindowProperties(void){
    SW_X = UI_X;
-   SW_Y = 350;
+   SW_Y = UI_Y + 250;
    SW_WIDTH = 270;
    SW_HEIGHT = 250;
    SW_COLOR = clrBlack;
@@ -249,6 +257,17 @@ void CIntervalApp::EVENT_BUTTON_PRESS(string button_name){
       PORTSubWindow(prefix);
       return;
    }
+   
+   if (button_name == ACC_BUTTON.button_name){
+      ACCSubWindow(prefix);
+      return;
+   }
+   
+   if (button_name == TARGETS_BUTTON.button_name){
+      TARGSubWindow(prefix);
+      return;
+   }
+   
    if (button_name == RM_BUTTON.button_name){
       RMSubWindow(prefix);
       return;
@@ -272,8 +291,7 @@ void CIntervalApp::RPSubWindow(string prefix){
    DrawRow(prefix, "RP Order", 4, EnumToString(RISK_PROFILE.RP_order_type));
    DrawRow(prefix, "RP Timeframe", 5, RISK_PROFILE.RP_timeframe);
    DrawRow(prefix, "RP Spread", 6, RISK_PROFILE.RP_spread);
-   DrawRow(prefix, "True Lot", 7, TRADE.CalcLot());
-   DrawRow(prefix, "True Risk", 8, TRADE.ValueAtRisk());
+   
 }
 void CIntervalApp::ENSubWindow(string prefix){
    string name = StringFormat("%s_terminal", prefix);
@@ -301,15 +319,17 @@ void CIntervalApp::FNSubWindow(string prefix){
    string text_label_name = StringFormat("%s_label", prefix);
    
    if (UpdateSubwindow(prefix) != prefix) return;
+   
+   double current_profit = NormalizeDouble(TRADE.account_balance() - TRADE.ACCOUNT_DEPOSIT, 2);
+   
    UI_SubWindow(FN_terminal, name, SW_X, SW_Y, SW_WIDTH, SW_HEIGHT, SW_COLOR);
    CTextLabel(text_label_name, SW_HEADER_X, SW_HEADER_Y, "Funded", SW_HEADER_FONTSIZE);
-   DrawRow(prefix, "Profit Target", 1, InpProfitTarget+"%");
-   DrawRow(prefix, "Chall Scaling", 2, InpChallScale);
-   DrawRow(prefix, "Chall DD Scaling", 3, InpChallDDScale);
-   DrawRow(prefix, "Live Scaling", 4, InpLiveScale);
-   DrawRow(prefix, "Live DD Scaling", 5, InpLiveDDScale);
-   DrawRow(prefix, "Min Target Points", 6, InpMinTargetPts);
-   DrawRow(prefix, "Chall DD Threshold", 7, InpPropDDThresh+"%");
+   DrawRow(prefix, "Chall Scaling", 1, InpChallScale);
+   DrawRow(prefix, "Chall DD Scaling", 2, InpChallDDScale);
+   DrawRow(prefix, "Live Scaling", 3, InpLiveScale);
+   DrawRow(prefix, "Live DD Scaling", 4, InpLiveDDScale);
+   DrawRow(prefix, "Min Target Points", 5, InpMinTargetPts);
+   DrawRow(prefix, "Chall DD Threshold", 6, InpPropDDThresh+"%");
    
    /*
    ProfitTargetReached
@@ -318,11 +338,11 @@ void CIntervalApp::FNSubWindow(string prefix){
    BreachedConsecutiveLossesThreshold
    BreachedEquityDrawdownThreshold
    */
-   DrawRow(prefix, "Target Reached", 8, (string)TRADE.ProfitTargetReached());
-   DrawRow(prefix, "Abs DD Thresh", 9, (string)TRADE.BelowAbsoluteDrawdownThreshold());
-   DrawRow(prefix, "Equity DD Thresh", 10, (string)TRADE.BelowEquityDrawdownThreshold());
-   DrawRow(prefix, "Lose Streak", 11, (string)TRADE.BreachedConsecutiveLossesThreshold());
-   DrawRow(prefix, "Equity DD", 12, (string)TRADE.BreachedEquityDrawdownThreshold());
+   DrawRow(prefix, "Target Reached", 7, (string)TRADE.ProfitTargetReached());
+   DrawRow(prefix, "Abs DD Thresh", 8, (string)TRADE.BelowAbsoluteDrawdownThreshold());
+   DrawRow(prefix, "Equity DD Thresh", 9, (string)TRADE.BelowEquityDrawdownThreshold());
+   DrawRow(prefix, "Lose Streak", 10, (string)TRADE.BreachedConsecutiveLossesThreshold());
+   DrawRow(prefix, "Equity DD", 11, (string)TRADE.BreachedEquityDrawdownThreshold());
    
 }
 
@@ -363,6 +383,8 @@ void CIntervalApp::PORTSubWindow(string prefix){
    UI_SubWindow(PORT_terminal, name, SW_X, SW_Y, SW_WIDTH, SW_HEIGHT, SW_COLOR);
    CTextLabel(text_label_name, SW_HEADER_X, SW_HEADER_Y, "Portfolio", SW_HEADER_FONTSIZE);
    
+   
+   
    DrawRow(prefix, "In Drawdown", 1, (string)PORTFOLIO.in_drawdown);
    DrawRow(prefix, "In Losing Streak", 2, (string)PORTFOLIO.is_losing_streak);
    DrawRow(prefix, "Curr DD %", 3, DoubleToString(PORTFOLIO.current_drawdown_percent,2)+" %");
@@ -373,8 +395,48 @@ void CIntervalApp::PORTSubWindow(string prefix){
    DrawRow(prefix,"Initial Deposit", 8, TRADE.account_deposit());
    DrawRow(prefix, "Data Points", 9, PORTFOLIO.data_points);
    DrawRow(prefix, "Latest", 10, TRADE.PortfolioLatestTradeTicket());
+   
 }
 
+void CIntervalApp::ACCSubWindow(string prefix){
+   
+   string name = SubWindowTerminalName(prefix);
+   string text_label_name = StringFormat("%s_label", prefix); 
+   
+   if (UpdateSubwindow(prefix) != prefix) return; 
+   
+   TRADE.UpdateAccounts();
+   
+   UI_SubWindow(ACC_terminal, name, SW_X, SW_Y, SW_WIDTH, SW_HEIGHT, SW_COLOR);
+   CTextLabel(text_label_name, SW_HEADER_X, SW_HEADER_Y, "Accounts", SW_HEADER_FONTSIZE);
+   
+   DrawRow(prefix, "Balance", 1, TRADE.account_balance());
+   DrawRow(prefix, "Deposit", 2, TRADE.ACCOUNT_DEPOSIT);
+   DrawRow(prefix, "Profit", 3, DoubleToString(TRADE.ACCOUNT_GAIN, 2));
+   
+}
+
+void CIntervalApp::TARGSubWindow(string prefix){
+   
+   string name = SubWindowTerminalName(prefix);
+   string text_label_name = StringFormat("%s_label", prefix);
+   
+   if (UpdateSubwindow(prefix) != prefix) return;
+   
+   TRADE.UpdateAccounts();
+   
+   UI_SubWindow(TARG_terminal, name, SW_X, SW_Y, SW_WIDTH, SW_HEIGHT, SW_COLOR);
+   CTextLabel(text_label_name, SW_HEADER_X, SW_HEADER_Y, "Targets", SW_HEADER_FONTSIZE);
+   
+   DrawRow(prefix, "Profit Target", 1, "$" + (int)TRADE.funded_target_usd);
+   DrawRow(prefix, "Current Profit" , 2, "$" + DoubleToString(TRADE.ACCOUNT_GAIN, 2));
+   DrawRow(prefix, "Remaining", 3, "$" + DoubleToString(TRADE.FUNDED_REMAINING_TARGET, 2));
+   DrawRow(prefix, "True Lot", 4, TRADE.CalcLot());
+   DrawRow(prefix, "True Risk", 5, TRADE.ValueAtRisk());
+   DrawRow(prefix, "Commission", 6, TRADE.CalcCommission());
+   DrawRow(prefix, "Trade Points", 7, DoubleToString(TRADE.CalcTP(TRADE.CalcCommission()) / TRADE.trade_points, 2));
+   
+}
 
 void CIntervalApp::RMSubWindow(string prefix){
 

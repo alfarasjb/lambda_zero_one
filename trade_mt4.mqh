@@ -2,7 +2,6 @@
 #include "definition.mqh"
 
 
-
 // ------------------------------- CLASS ------------------------------- //
 
 class CIntervalTrade{
@@ -14,7 +13,7 @@ class CIntervalTrade{
    public: 
       // TRADE PARAMETERS
       float       order_lot;
-      double      entry_price, sl_price, tp_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot, ACCOUNT_DEPOSIT, ACCOUNT_CUTOFF;
+      double      entry_price, sl_price, tp_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot, ACCOUNT_DEPOSIT, ACCOUNT_CUTOFF, ACCOUNT_GAIN, FUNDED_REMAINING_TARGET;
       int         digits;
       
       // FUNDED 
@@ -27,8 +26,11 @@ class CIntervalTrade{
       void              SetRiskProfile();
       void              SetFundedProfile();
       void              InitializeSymbolProperties();
+      void              InitializeAccounts();
       double            CalcLot();
       double            ValueAtRisk();
+      double            BrokerCommission();
+      double            CalcCommission();
       
       // ENCAPSULATION
       double            TICK_VALUE()      { return tick_value; }
@@ -90,7 +92,7 @@ class CIntervalTrade{
       
       // FUNDED
       float             RiskScaling();
-      double            CalcTP(int ticket);
+      double            CalcTP(double comm = NULL);
       double            CalcTradePoints(double target_amount);
       bool              ProfitTargetReached();
       bool              EvaluationPhase();
@@ -184,7 +186,11 @@ class CIntervalTrade{
       bool              TicketInPortfolioHistory(int ticket);
       bool              AccountInDrawdown();
       double            LatestTradeIsLoss();
+      int               ExportBacktestHistory();
       
+      // ACCOUNTS 
+      
+      double              UpdateAccounts();
 };
 
 
@@ -192,8 +198,7 @@ class CIntervalTrade{
 
 CIntervalTrade::CIntervalTrade(void){
    InitializeSymbolProperties();
-   ACCOUNT_DEPOSIT = account_deposit();
-   ACCOUNT_CUTOFF = ACCOUNT_DEPOSIT * InpCutoff;
+   InitializeAccounts();
    TRADES_ACTIVE.candle_counter = 0;
    TRADES_ACTIVE.orders_today = 0;
 }
@@ -203,6 +208,24 @@ void CIntervalTrade::InitializeSymbolProperties(void){
    trade_points = util_trade_pts();
    digits = util_symbol_digits();
 }
+
+void CIntervalTrade::InitializeAccounts(void){
+   ACCOUNT_DEPOSIT = account_deposit();
+   ACCOUNT_CUTOFF = ACCOUNT_DEPOSIT * InpCutoff;
+}
+
+
+// ------------------------------- ACCOUNTS ------------------------------- //
+
+double CIntervalTrade::UpdateAccounts(void){
+   if (!IsTesting()) InitializeAccounts();
+   SetFundedProfile();
+   ACCOUNT_GAIN = account_balance() - ACCOUNT_DEPOSIT;
+   FUNDED_REMAINING_TARGET = funded_target_usd - ACCOUNT_GAIN + 1;
+   return ACCOUNT_GAIN;
+}
+
+// ------------------------------- ACCOUNTS ------------------------------- //
 
 
 // ------------------------------- HISTORY ------------------------------- //
@@ -418,7 +441,6 @@ TradesHistory CIntervalTrade::LastEntry(void){
    TRADE_HISTORY.profit = PosProfit();
    TRADE_HISTORY.max_equity = stored_max_equity; 
    TRADE_HISTORY.percent_drawdown = TRADE_HISTORY.rolling_balance < TRADE_HISTORY.max_equity ? (1 - (TRADE_HISTORY.rolling_balance / TRADE_HISTORY.max_equity)) * 100 : 0; 
-   
    return TRADE_HISTORY;
 }
 
@@ -589,18 +611,18 @@ bool CIntervalTrade::IsUnderperforming(void){
    return false;
 }
 
-double CIntervalTrade::CalcTP(int ticket){
+double CIntervalTrade::CalcTP(double comm = NULL){
    /*
    Calculates TP Points. 
    
    Used with challenge account, sets a take profit needed to achieve profit target. 
    */
    
-   double commission = PosCommission();
+   double commission = comm == NULL ? PosCommission() : comm;
    
    double current_account_profit = account_balance() - ACCOUNT_DEPOSIT; 
    
-   double remaining_profit_target = funded_target_usd - current_account_profit + commission; // add commission here 
+   double remaining_profit_target = FUNDED_REMAINING_TARGET + commission; // add commission here 
    
    
    
@@ -682,7 +704,6 @@ bool CIntervalTrade::EquityReachedProfitTarget(void){
    
    Used for manually closing if equity ticks above target equity. 
    */
-   
    if ((account_equity() >= funded_target_equity) && (account_balance() < funded_target_equity)) return true; 
    return false;
 }
@@ -701,7 +722,7 @@ double CIntervalTrade::EquityDrawdownScaleFactor(void){
 bool CIntervalTrade::BreachedConsecutiveLossesThreshold(void){
    //if (PORTFOLIO.last_consecutive_losses < InpMinLoseStreak && !AccountInDrawdown() && !LatestTradeIsLoss()) return false;
    //return true;
-   if (PORTFOLIO.last_consecutive_losses > InpMinLoseStreak && LatestTradeIsLoss()) return true; 
+   if (PORTFOLIO.last_consecutive_losses >= InpMinLoseStreak && LatestTradeIsLoss()) return true; 
    return false;
 }
 
@@ -722,6 +743,26 @@ double CIntervalTrade::LatestTradeIsLoss(void){
 
 
 // ------------------------------- INIT ------------------------------- //
+
+double CIntervalTrade::BrokerCommission(void){
+  // last entry in history 
+  
+  int ticket = PortfolioLatestTradeTicket();
+  if (ticket <= 0) return 0;
+  int s = OrderSelect(ticket, SELECT_BY_TICKET, MODE_HISTORY);
+  
+  double comm_per_lot = NormalizeDouble(PosCommission() / PosLots(), 2);
+ 
+  return comm_per_lot;
+}
+
+double CIntervalTrade::CalcCommission(void){
+   double lot = CalcLot();
+   
+   double commission = MathAbs(NormalizeDouble(CalcLot() * BrokerCommission(), 2));
+   
+   return commission;
+}
 
 void CIntervalTrade::SetRiskProfile(void){
       /*
@@ -778,7 +819,7 @@ double CIntervalTrade::CalcLot(){
    if (scaled_lot < symbol_minlot) return symbol_minlot;
    if (scaled_lot > symbol_maxlot) return symbol_maxlot;
    
-   return scaled_lot;
+   return NormalizeDouble(scaled_lot, 2);
 }
 
 // ------------------------------- INIT ------------------------------- //
@@ -795,7 +836,7 @@ double CIntervalTrade::SetChallengeAccountTakeProfit(){
       int t = OP_OrderSelectByTicket(ticket);
       
       
-      double tp_points = CalcTP(PosTicket());
+      double tp_points = CalcTP();
       
       int factor = PosOrderType() == ORDER_TYPE_SELL ? -1 : 1; 
       double take_profit_price = EvaluationPhase() ? (entry_price + (tp_points * factor)) : 0;
@@ -1775,12 +1816,12 @@ int               CIntervalTrade::PosMagic()       { return OrderMagicNumber(); 
 datetime          CIntervalTrade::PosOpenTime()    { return OrderOpenTime(); }
 datetime          CIntervalTrade::PosCloseTime()   { return OrderCloseTime(); }
 double            CIntervalTrade::PosOpenPrice()   { return OrderOpenPrice(); }
-double            CIntervalTrade::PosProfit()      { return (OrderProfit() + OrderCommission()); }
+double            CIntervalTrade::PosProfit()      { return (OrderProfit() + OrderCommission() + OrderSwap()); }
 ENUM_ORDER_TYPE   CIntervalTrade::PosOrderType()   { return OrderType(); }
 double            CIntervalTrade::PosSL()          { return OrderStopLoss(); }
 double            CIntervalTrade::PosTP()          { return OrderTakeProfit(); }
 int               CIntervalTrade::PosHistTotal()   { return OrdersHistoryTotal(); }
-double            CIntervalTrade::PosCommission()  { return OrderCommission(); }
+double            CIntervalTrade::PosCommission()  { return MathAbs(OrderCommission()); }
 
 
 int CIntervalTrade::OP_OrdersCloseAll(void){
@@ -1871,7 +1912,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
       
    }
    
-   
+   UpdateAccounts();
    
    return 1;
 }
@@ -1942,7 +1983,7 @@ double   CIntervalTrade::account_deposit(void) {
       int s = OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
       if (OrderType() == 6) return OrderProfit();
    }
-   //logger("Deposit not found. Using Dummy.");
+   //logger("Deposit not found. Using Dummy.", __FUNCTION__);
    return InpDummyDeposit; 
 }
 
