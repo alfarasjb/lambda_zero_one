@@ -357,7 +357,7 @@ input AlgoMode          InpMode           = MODE_LIVE; // DEPLOYMENT MODE
 // ========== UI ========== //
 
 int   UI_X        = 5;
-int   UI_Y        = 100;
+int   UI_Y        = 130;
 int   UI_WIDTH    = 235;
 int   UI_HEIGHT   = 300; 
 
