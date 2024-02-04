@@ -222,8 +222,8 @@ int CNewsEvents::GetHighImpactNewsInEntryWindow(datetime entry_open,datetime ent
 }
 
 bool CNewsEvents::HighImpactNewsInEntryWindow(void){
-   if (ArraySize(NEWS_IN_TRADING_WINDOW) == 0) return false;
    if (InpTradeOnNews) return false; 
+   if (ArraySize(NEWS_IN_TRADING_WINDOW) == 0) return false;
    return true;
 }
 
