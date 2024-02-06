@@ -1,5 +1,5 @@
 // DEFITIONS AND 
-
+#include <MAIN/CalendarDownloader.mqh>
 
 enum Orders{
    Long,
@@ -337,11 +337,12 @@ input float             InpSpreadDelay    = 1; // SPREAD DELAY (seconds)
 input int               InpMagic          = 232323; // MAGIC NUMBER
 input bool              InpShowUI         = false; // SHOW UI
 input bool              InpTradeOnNews    = false; // TRADE ON NEWS
+input Source            InpNewsSource     = R4F_WEEKLY; // NEWS SOURCE
 
 input string            InpLog            = "========== LOGGING =========="; // ========== LOGGING ==========
 input bool              InpLogging        = true; // CSV LOGGING - Enables/Disables Trade Logging
 input bool              InpTerminalMsg    = true; // TERMINAL LOGGING - Enables/Disables Terminal Logging
-input bool              InpPushNotifs     = true; // PUSH NOTIFICATIONS
+input bool              InpPushNotifs     = false; // PUSH NOTIFICATIONS
 
 input string            InpBacktest       = "========== BACKTEST =========="; // ========== BACKTEST ==========
 input double            InpDummyDeposit   = 100000; // BACKTEST DUMMY DEPOSIT - For strategy tester
@@ -369,4 +370,5 @@ color DEF_FONT_COLOR = clrWhite;
 // Syntax: <Abbreviation>-<Date Deployed>-<Base Version>
 // DO NOT CHANGE
 const string EA_ID = "LZO-010124-2";
-const string FXFACTORY_DIRECTORY = "lambda_zero_one\\news";
+const string FXFACTORY_DIRECTORY = "lambda_zero_one\\ff_news";
+const string R4F_DIRECTORY = "lambda_zero_one\\r4f_news";

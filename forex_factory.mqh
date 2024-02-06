@@ -1,6 +1,6 @@
 
 
-#include <B63/FFCalendarDownload.mqh>
+
 #include "definition.mqh"
 
 
@@ -13,7 +13,7 @@ class CNewsEvents{
    
    public:
       
-      SFFEvent    NEWS_CURRENT[], NEWS_TODAY[], NEWS_SYMBOL_TODAY[], NEWS_IN_TRADING_WINDOW[];
+      SCalendarEvent    NEWS_CURRENT[], NEWS_TODAY[], NEWS_SYMBOL_TODAY[], NEWS_IN_TRADING_WINDOW[];
       int         FILE_HANDLE;
       
       CNewsEvents();
@@ -22,8 +22,8 @@ class CNewsEvents{
       void        UpdateEntryWindow(datetime window_open, datetime window_end);
       
       int         FetchData();
-      int         AppendToNews(SFFEvent &event, SFFEvent &news_data[]);
-      int         DownloadFromForexFactory(string file_name);
+      int         AppendToNews(SCalendarEvent &event, SCalendarEvent &news_data[]);
+      int         DownloadNews(string file_name, Source src);
       int         GetNewsSymbolToday();
       
       datetime    DateToday();
@@ -31,10 +31,10 @@ class CNewsEvents{
       datetime    GetDate(datetime parse_datetime);
       datetime    ParseDates(string date, string time);
       
-      int         ClearArray(SFFEvent &data[]);
+      int         ClearArray(SCalendarEvent &data[]);
       bool        DateMatch(datetime target, datetime reference);
       bool        SymbolMatch(string country);
-      bool        ArrayIsEmpty(SFFEvent &data[]);
+      bool        ArrayIsEmpty(SCalendarEvent &data[]);
       bool        FileExists(string file_path);
       bool        HighImpactNewsToday();
       int         NumNews();
@@ -43,6 +43,10 @@ class CNewsEvents{
       int         ClearHandle();
       int         GetHighImpactNewsInEntryWindow(datetime entry_open, datetime entry_close);
       bool        HighImpactNewsInEntryWindow();
+      string      Directory();
+      int         ParseFXFactoryData(int handle);
+      int         ParseR4FData(int handle);
+      string      ParseImpact(string impact);
 };
 
 
@@ -53,19 +57,21 @@ CNewsEvents::~CNewsEvents(void){
    ClearHandle();
 }
 
-void CNewsEvents::UpdateEntryWindow(datetime window_open,datetime window_end){
+void        CNewsEvents::UpdateEntryWindow(datetime window_open,datetime window_end){
    entry_window_open = window_open;
    entry_window_close = window_end;
 }
 
-int CNewsEvents::ClearHandle(void){
+int         CNewsEvents::ClearHandle(void){
    FileClose(FILE_HANDLE);
    FileFlush(FILE_HANDLE);
    FILE_HANDLE = 0;
    return FILE_HANDLE;
 }
 
-int CNewsEvents::FetchData(void){
+int         CNewsEvents::FetchData(void){
+
+   if (IsTesting()) return 0;
 
    ResetLastError();
    ClearArray(NEWS_CURRENT);
@@ -79,46 +85,40 @@ int CNewsEvents::FetchData(void){
    //datetime file_date = latest;
    
    string file_name = StringFormat("%s.csv", TimeToString(file_date, TIME_DATE));
-   string file_path = StringFormat("%s\\%s", FXFACTORY_DIRECTORY, file_name);
+   string file_path = StringFormat("%s\\%s", Directory(), file_name);
    // attempt to open file, if file does not exist, download from fxfactory
    
    
    if (!FileExists(file_path)) {
       PrintFormat("%s: File %s not found. Downloading from forex factory.", __FUNCTION__, file_path);
-      if (DownloadFromForexFactory(file_name) == -1) PrintFormat("%s: Download Failed. Error: %i", __FUNCTION__, GetLastError());
+      if (DownloadNews(file_name, InpNewsSource) == -1) PrintFormat("%s: Download Failed. Error: %i", __FUNCTION__, GetLastError());
    }
    else PrintFormat("%s: File %s found", __FUNCTION__, file_path);
    
    
-   string result[];
-   string sep = ",";
-   string sep_char = StringGetCharacter(sep, 0);
-   
-   int line = 0;
-   
    FILE_HANDLE = FileOpen(file_path, FILE_CSV | FILE_READ | FILE_ANSI, "\n");
    if (FILE_HANDLE == -1) return -1;
    
-   while (!FileIsLineEnding(FILE_HANDLE)){
+   switch(InpNewsSource) {
+      case FXFACTORY_WEEKLY:     ParseFXFactoryData(FILE_HANDLE); break; 
+      case R4F_WEEKLY:           ParseR4FData(FILE_HANDLE); break;
+   }
    
-      string file_string = FileReadString(FILE_HANDLE);
+   GetNewsSymbolToday();
+   return NumNews();
+}
+
+int         CNewsEvents::ParseFXFactoryData(int handle) { 
+   string result[];
+   int line = 0;
+   while (!FileIsLineEnding(handle)) {
+      string file_string = FileReadString(handle);
       
-      int split = (int)StringSplit(file_string, sep_char, result);
-      line++;
+      int split = (int)StringSplit(file_string, ',', result);
+      line++; 
       if (line == 1) continue;
-      // append to news events here
       
-      /*
-      0 title
-      1 country
-      2 date
-      3 time
-      4 impact
-      5 forecast
-      6 previous
-      */
-      
-      SFFEvent event;
+      SCalendarEvent event; 
       event.title = result[0];
       event.country = result[1];
       event.time = ParseDates(result[2], result[3]);
@@ -126,13 +126,52 @@ int CNewsEvents::FetchData(void){
       event.forecast = result[5];
       event.previous = result[6];
       AppendToNews(event, NEWS_CURRENT);
-      //break;
+      
    }
-   GetNewsSymbolToday();
+   
    return NumNews();
 }
 
-bool CNewsEvents::FileExists(string file_path){
+int         CNewsEvents::ParseR4FData(int handle) { 
+   string result [];
+   int line = 0;
+   while(!FileIsLineEnding(handle)) { 
+      string file_string = FileReadString(handle);
+      
+      int split = (int)StringSplit(file_string, ',', result);
+      
+      if (split == 0) break;
+      if (StringFind(result[0], "/", 0) < 0) continue; 
+      
+      StringReplace(result[0], "/", ".");
+      string datetime_string = result[0] + " " + result[1];
+      
+      MqlDateTime r4fdate;
+      TimeToStruct(StringToTime(datetime_string), r4fdate);
+      r4fdate.hour = r4fdate.hour + 2; 
+      
+      datetime r4fdatetime = StructToTime(r4fdate);
+      
+      SCalendarEvent event;
+      event.title = result[4];
+      event.time = r4fdatetime;
+      event.country = result[2];
+      event.impact = ParseImpact(result[3]);      
+      
+      AppendToNews(event, NEWS_CURRENT);
+      
+   }
+   return 0;
+}
+
+string         CNewsEvents::ParseImpact(string impact) { 
+   if (impact == "H") return "High";
+   if (impact == "M") return "Medium";
+   if (impact == "L") return "Low";
+   return "";
+}
+
+bool           CNewsEvents::FileExists(string file_path){
    int handle = FileOpen(file_path, FILE_CSV | FILE_READ | FILE_ANSI, "\n");
    if (handle == -1) return false;
    FileClose(handle);
@@ -140,12 +179,15 @@ bool CNewsEvents::FileExists(string file_path){
    return true;
 }
 
-datetime CNewsEvents::ParseDates(string date, string time){
+datetime       CNewsEvents::ParseDates(string date, string time){
 
    string result[];
    ushort u_sep = StringGetCharacter("-", 0);
    int split = StringSplit(date, u_sep, result);
+   //Print("RESULT: ", ArraySize(result));
+   //Print("DATE: ", date, " time: ", time);
    
+   if (split == 0) return 0;
    int gmt_offset = (int)MathAbs(TimeGMTOffset());
    int server_offset = (int)(TimeLocal() - TimeCurrent());
    
@@ -179,7 +221,7 @@ datetime CNewsEvents::ParseDates(string date, string time){
    return final_dt;
 }
 
-int CNewsEvents::GetNewsSymbolToday(void){
+int         CNewsEvents::GetNewsSymbolToday(void){
    // iterate through main dataset and identify symbol and date. 
    // Appends to news today: High impact and holiday. 
    
@@ -199,13 +241,13 @@ int CNewsEvents::GetNewsSymbolToday(void){
    return ArraySize(NEWS_SYMBOL_TODAY);
 }
 
-bool CNewsEvents::HighImpactNewsToday(void) {
+bool        CNewsEvents::HighImpactNewsToday(void) {
    if (ArraySize(NEWS_SYMBOL_TODAY) == 0) return false;
    if (InpTradeOnNews) return false;
    return true; 
 }
 
-int CNewsEvents::GetHighImpactNewsInEntryWindow(datetime entry_open,datetime entry_close){
+int         CNewsEvents::GetHighImpactNewsInEntryWindow(datetime entry_open,datetime entry_close){
    // REFRESH THIS EVERY DAY 
    
    ClearArray(NEWS_IN_TRADING_WINDOW);
@@ -221,13 +263,14 @@ int CNewsEvents::GetHighImpactNewsInEntryWindow(datetime entry_open,datetime ent
    return ArraySize(NEWS_IN_TRADING_WINDOW);
 }
 
-bool CNewsEvents::HighImpactNewsInEntryWindow(void){
+bool        CNewsEvents::HighImpactNewsInEntryWindow(void){
+
    if (InpTradeOnNews) return false; 
    if (ArraySize(NEWS_IN_TRADING_WINDOW) == 0) return false;
    return true;
 }
 
-int CNewsEvents::AppendToNews(SFFEvent &event, SFFEvent &news_data[]){
+int         CNewsEvents::AppendToNews(SCalendarEvent &event, SCalendarEvent &news_data[]){
  
    
    int size = ArraySize(news_data);
@@ -238,9 +281,10 @@ int CNewsEvents::AppendToNews(SFFEvent &event, SFFEvent &news_data[]){
    return NumNews();
 }
 
-int CNewsEvents::DownloadFromForexFactory(string file_name){
-   CFFCalendarDownload *downloader = new CFFCalendarDownload(FXFACTORY_DIRECTORY, 50000);
-   bool success = downloader.Download(file_name);
+
+int         CNewsEvents::DownloadNews(string file_name, Source src) { 
+   CCalendarDownload *downloader = new CCalendarDownload(Directory(), 50000);
+   bool success = downloader.Download(file_name, src);
    
    delete downloader;
    if (!success) return -1; 
@@ -249,8 +293,7 @@ int CNewsEvents::DownloadFromForexFactory(string file_name){
 
 
 
-
-datetime CNewsEvents::GetDate(datetime parse_datetime){
+datetime    CNewsEvents::GetDate(datetime parse_datetime){
    MqlDateTime dt_struct;
    TimeToStruct(parse_datetime, dt_struct);
    
@@ -261,18 +304,18 @@ datetime CNewsEvents::GetDate(datetime parse_datetime){
    return StructToTime(dt_struct);
 }
 
-int CNewsEvents::ClearArray(SFFEvent &data[]){
+int         CNewsEvents::ClearArray(SCalendarEvent &data[]){
    ArrayFree(data);
    ArrayResize(data, 0);
    return ArraySize(data);
 }
 
-bool CNewsEvents::DateMatch(datetime target,datetime reference){
+bool        CNewsEvents::DateMatch(datetime target,datetime reference){
    if (StringFind(TimeToString(target), TimeToString(reference, TIME_DATE)) == -1) return false;
    return true;
 }
 
-bool CNewsEvents::SymbolMatch(string country){
+bool        CNewsEvents::SymbolMatch(string country){
    int match = StringFind(Symbol(), country);
    //PrintFormat("FIND: %s, COUNTRY: %s, RESULT: %i", Symbol(), country, match);
    
@@ -280,9 +323,17 @@ bool CNewsEvents::SymbolMatch(string country){
    return true;
 }
 
-bool CNewsEvents::ArrayIsEmpty(SFFEvent &data[]){
+bool        CNewsEvents::ArrayIsEmpty(SCalendarEvent &data[]){
    if (ArraySize(data) == 0) return true; 
    return false;
+}
+
+string      CNewsEvents::Directory(void) { 
+   switch(InpNewsSource) { 
+      case FXFACTORY_WEEKLY:  return FXFACTORY_DIRECTORY; 
+      case R4F_WEEKLY:        return R4F_DIRECTORY;
+   }
+   return "";
 }
 
 datetime    CNewsEvents::LatestWeeklyCandle()      { return iTime(Symbol(), PERIOD_W1, 0); }

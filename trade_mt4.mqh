@@ -154,6 +154,7 @@ class CIntervalTrade{
       double            util_comm_adj_diff();
       int               util_symbol_digits();
       string            util_norm_price(double value);
+      double            util_norm_value(double value);
       
       
       double            account_balance();
@@ -550,7 +551,7 @@ SAFEGUARD CHALLENGE DRAWDOWN Size Down to 1
 void CIntervalTrade::SetFundedProfile(void){
 
    funded_target_usd = ACCOUNT_DEPOSIT * (InpProfitTarget / 100);
-   funded_target_equity = ACCOUNT_DEPOSIT + funded_target_usd;
+   funded_target_equity = NormalizeDouble(ACCOUNT_DEPOSIT + funded_target_usd, 2);
 }
 
 
@@ -626,13 +627,13 @@ double CIntervalTrade::CalcTP(double comm = NULL){
    
    
    
-   double take_profit_points = (remaining_profit_target) / (CalcLot() * tick_value * (1 / trade_points)); 
+   double take_profit_points = ((remaining_profit_target) / (CalcLot() * tick_value * (1 / trade_points))) + (1 * trade_points); 
    double points = take_profit_points / trade_points;
    
    double tp = entry_price + take_profit_points;
    
-   if (points < InpMinTargetPts) return (InpMinTargetPts * trade_points);
-  
+   //if (points < InpMinTargetPts) return (InpMinTargetPts * trade_points);
+   
    
    return take_profit_points;   
 }
@@ -835,14 +836,14 @@ double CIntervalTrade::SetChallengeAccountTakeProfit(){
       int ticket = TRADES_ACTIVE.trade_ticket;
       int t = OP_OrderSelectByTicket(ticket);
       
-      
       double tp_points = CalcTP();
+      tp_points = (tp_points / trade_points) < InpMinTargetPts ? InpMinTargetPts * trade_points : tp_points; // use min points 
       
       int factor = PosOrderType() == ORDER_TYPE_SELL ? -1 : 1; 
       double take_profit_price = EvaluationPhase() ? (entry_price + (tp_points * factor)) : 0;
       
       int m = OP_ModifyTP(take_profit_price);
-      if (m) logger(StringFormat("Modified Take Profit for Ticket: %i", ticket), __FUNCTION__, true);
+      if (m) logger(StringFormat("Modified Take Profit for Ticket: %i. Trade Points: %f, Take Profit: %f", ticket, tp_points, take_profit_price), __FUNCTION__, true);
    }
    
    return 0;   
@@ -1632,6 +1633,10 @@ int CIntervalTrade::SendMarketOrder(void){
       case Recursive: // recursive
       
          while (util_market_spread() >= RISK_PROFILE.RP_spread || !DelayedAndValid()){
+            /*
+            if challenge account, evaluation phase, spread < remaining target points, break
+            
+            */
             Sleep(delay);
             
             if (TimeCurrent() >= TRADE_QUEUE.curr_trade_close) return -30;
@@ -2145,6 +2150,10 @@ string  CIntervalTrade::util_norm_price(double value) {
 
    string format_string = StringFormat("%%.%df", digits);
    return StringFormat(format_string, value);
+}
+
+double CIntervalTrade::util_norm_value(double value) {
+   return NormalizeDouble(value, 2); 
 }
 
 int      CIntervalTrade::util_shift_to_entry(void) {
