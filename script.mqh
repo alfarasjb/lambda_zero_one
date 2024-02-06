@@ -268,10 +268,11 @@ void EventsInWindow(){
 void Accounts(bool notify = false){
    interval_trade.UpdateAccounts();
    
-   interval_trade.logger(StringFormat("Balance: %s \nProfit: %s \nRemaining: %s", 
+   interval_trade.logger(StringFormat("Balance: %s \nProfit: %s \nRemaining: %s \n TP Points: %s", 
       DoubleToString(interval_trade.account_balance(), 2), 
       DoubleToString(interval_trade.ACCOUNT_GAIN, 2),
-      DoubleToString(interval_trade.FUNDED_REMAINING_TARGET, 2)), __FUNCTION__, notify, notify);
+      DoubleToString(interval_trade.FUNDED_REMAINING_TARGET, 2),
+      DoubleToString(interval_trade.CalcTP(interval_trade.CalcCommission()), 5)), __FUNCTION__, notify, notify);
 }
 
 /*

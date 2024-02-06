@@ -304,7 +304,7 @@ input ENUM_TIMEFRAMES   InpRPTimeframe    = PERIOD_M15; // RISK PROFILE: Timefra
 input float             InpRPSpread       = 10; // RISK PROFILE: Spread
 
 input string            InpEntry          = "========== ENTRY WINDOW =========="; // ========== ENTRY WINDOW ==========
-input int               InpEntryHour      = 1; // ENTRY WINDOW HOUR 
+input int               InpEntryHour      = 0; // ENTRY WINDOW HOUR 
 input int               InpEntryMin       = 0; // ENTRY WINDOW MINUTE
 
 input string            InpRiskMgt        = "========== RISK MANAGEMENT =========="; // ========== RISK MANAGEMENT ==========
