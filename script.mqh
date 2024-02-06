@@ -24,7 +24,6 @@ CIntervalApp interval_app(interval_trade, news_events, UI_X, UI_Y, UI_WIDTH, UI_
 
 
 
-
 int OnInit()
   {
 //---
@@ -40,6 +39,8 @@ int OnInit()
    interval_trade.SetFundedProfile();
    interval_trade.UpdateAccounts();
    //set_deadline();
+   
+   
    int num_news_data = news_events.FetchData();
    interval_trade.logger(StringFormat("%i news events added. %i events today.", num_news_data, news_events.NumNewsToday()), __FUNCTION__);
    interval_trade.logger(StringFormat("High Impact News Today: %s", (string) news_events.HighImpactNewsToday()), __FUNCTION__);
@@ -102,7 +103,8 @@ int OnInit()
    
    
    interval_trade.BrokerCommission();
-   Print("COMM: ", interval_trade.CalcCommission());
+   
+   
    return(INIT_SUCCEEDED);
 
   }
@@ -190,6 +192,8 @@ void OnTick()
          
          LotsStatus();
          
+         RefreshNews();
+         
          EventsSymbolToday();
             
          EventsInWindow();
@@ -234,6 +238,16 @@ void TerminalStatus(){
       IsConnected() ? "Connected" : "Not Connected"
       ), __FUNCTION__, true, true);   
 }
+
+
+void RefreshNews() {
+   int num_news_data = news_events.FetchData();
+   interval_trade.logger(StringFormat("%i news events added. %i events today.", num_news_data, news_events.NumNewsToday()), __FUNCTION__);
+   
+}
+
+
+
 
 void EventsSymbolToday(){
    interval_trade.logger(StringFormat("High Impact News Today: %s \nNum News Today: %i",

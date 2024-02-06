@@ -19,7 +19,7 @@ class CIntervalApp : public CInterface{
    public: 
       Button   BASE_BUTTONS[];
       Button   RP_BUTTON, EN_BUTTON, RM_BUTTON, FN_BUTTON, MS_BUTTON, LG_BUTTON, PORT_BUTTON, NEWS_BUTTON, TARGETS_BUTTON, ACC_BUTTON;
-      SFFEvent NEWS_EVENT[];
+      SCalendarEvent NEWS_EVENT[];
       
       string   ACTIVE_SUBWINDOW; 
       
@@ -476,8 +476,8 @@ void CIntervalApp::NEWSSubWindow(string prefix){
    //int size = NEWS.NumNews();
    //int size = NEWS.GetHighImpactNewsInEntryWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
    for (int i = 0; i < size; i ++){
-      SFFEvent news_today = NEWS.NEWS_SYMBOL_TODAY[i];
-      //SFFEvent news_today = NEWS.NEWS_IN_TRADING_WINDOW[i]; 
+      SCalendarEvent news_today = NEWS.NEWS_SYMBOL_TODAY[i];
+      //SCalendarEvent news_today = NEWS.NEWS_IN_TRADING_WINDOW[i]; 
       string title = StringSubstr(news_today.title, 0, 25);
       DrawRow(prefix, title, i+1, StringFormat("             %s %s", TimeToString(news_today.time, TIME_MINUTES), news_today.impact));
       
