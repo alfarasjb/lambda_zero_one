@@ -434,7 +434,7 @@ void CIntervalApp::TARGSubWindow(string prefix){
    DrawRow(prefix, "True Lot", 4, TRADE.CalcLot());
    DrawRow(prefix, "True Risk", 5, TRADE.ValueAtRisk());
    DrawRow(prefix, "Commission", 6, TRADE.CalcCommission());
-   DrawRow(prefix, "Trade Points", 7, DoubleToString(TRADE.CalcTP(TRADE.CalcCommission()) / TRADE.trade_points, 2));
+   DrawRow(prefix, "TP Points", 7, DoubleToString(TRADE.CalcTP(TRADE.CalcCommission()) / TRADE.trade_points, 2));
    
 }
 
