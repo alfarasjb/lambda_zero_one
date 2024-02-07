@@ -966,12 +966,12 @@ bool CIntervalTrade::DelayedEntryPriceValid(){
    
       case Long:
       
-         valid = delayed_entry_reference > util_price_ask() ? true : false; 
+         valid = delayed_entry_reference >= util_price_ask() ? true : false; 
          break;
          
       case Short: 
       
-         valid = delayed_entry_reference < util_price_bid() ? true : false;
+         valid = delayed_entry_reference <= util_price_bid() ? true : false;
          break;
          
       default: 

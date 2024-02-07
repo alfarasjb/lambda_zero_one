@@ -3,6 +3,7 @@
 
 #include <B63/Generic.mqh>
 #include <B63/CExport.mqh>
+#include <MAIN/Loader.mqh>
 CExport export_hist("lambda_zero_one");
 #ifdef __MQL4__
 #include "trade_mt4.mqh"
@@ -14,14 +15,11 @@ CExport export_hist("lambda_zero_one");
 
 #include "forex_factory.mqh"
 #include "app.mqh"
-#include "loader.mqh"
 
 CIntervalTrade interval_trade;
-CLoader loader;
 CNewsEvents news_events;
 CIntervalApp interval_app(interval_trade, news_events, UI_X, UI_Y, UI_WIDTH, UI_HEIGHT);
-
-
+CCalendarHistoryLoader calendar_loader;
 
 
 int OnInit()
@@ -32,7 +30,6 @@ int OnInit()
    #endif 
    
    
-   if (InpMode == MODE_BACKTEST) interval_trade.logger(StringFormat("Num Dates Loaded: %i", loader.LoadFromFile()), __FUNCTION__, false, InpDebugLogging);
    interval_trade.InitializeSymbolProperties();
    interval_trade.InitHistory();
    interval_trade.SetRiskProfile();
@@ -104,6 +101,7 @@ int OnInit()
    
    interval_trade.BrokerCommission();
    
+   if (IsTesting()) Print("NUM: ", calendar_loader.LoadCSV(HIGH)); 
    
    
    return(INIT_SUCCEEDED);
@@ -115,8 +113,6 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
-   //PrintFormat("REASON: %i", reason);
-   interval_trade.logger(StringFormat("Num Dates Processed: %i", loader.NUM_LOADED_HISTORY), __FUNCTION__, false, InpDebugLogging);
    ObjectsDeleteAll(0, 0, -1);
    
    if (InpMode == MODE_LIVE) return;
@@ -142,6 +138,7 @@ void OnTick()
    if (IsNewCandle() && interval_trade.CorrectPeriod() && interval_trade.MinimumEquity()){
       
       
+      
       bool ValidTradeOpen = interval_trade.ValidTradeOpen();
       
       //interval_trade.logger(StringFormat("Valid Trade Open: %s", (string)ValidTradeOpen), __FUNCTION__, false, true);
@@ -149,11 +146,10 @@ void OnTick()
       if (ValidTradeOpen){
             
          bool EventsInEntryWindow = news_events.HighImpactNewsInEntryWindow(); 
-         bool IsNewsDate = loader.IsNewsDate();
-         
-         interval_trade.logger(StringFormat("High Impact News in Entry Window: %s, Is News Date: %s", (string)EventsInEntryWindow, (string)IsNewsDate), __FUNCTION__);
-         
-         if (!IsNewsDate && !EventsInEntryWindow){
+         bool backtest_events_in_window = InpTradeOnNews ? false : calendar_loader.EventInWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
+         interval_trade.logger(StringFormat("Events In Entry Window: %s, Backtest Events In Window: %s", (string)EventsInEntryWindow, (string)backtest_events_in_window), __FUNCTION__, false, true);
+  
+         if (!backtest_events_in_window && !EventsInEntryWindow) {
             
             // sends market order
             int order_send_result = interval_trade.SendMarketOrder();
@@ -185,9 +181,16 @@ void OnTick()
       if (interval_trade.IsNewDay()) { 
          interval_trade.ClearOrdersToday();
          //EventsInWindow();
-         
       }
       if (interval_trade.PreEntry()){
+         if (IsTesting()) {
+            // RESET
+            if (calendar_loader.IsNewYear()) calendar_loader.LoadCSV(HIGH);
+            
+            int num_news_loaded = calendar_loader.LoadDatesToday(HIGH);
+            interval_trade.logger(StringFormat("NEWS LOADED: %i", num_news_loaded), __FUNCTION__, false, true);
+            calendar_loader.UpdateToday();
+         }
          
          TerminalStatus();
          
@@ -207,6 +210,7 @@ void OnTick()
       
       // UPDATE ACCOUNTS HERE 
       interval_trade.UpdateAccounts();
+      
    }
   }
   
@@ -228,7 +232,7 @@ void LotsStatus(){
       interval_trade.TRUE_RISK(),
       interval_trade.CalcLot(),
       InpMaxLot
-   ), __FUNCTION__,true, true);   
+   ), __FUNCTION__,true, InpDebugLogging);   
 }
 
 void TerminalStatus(){
@@ -237,7 +241,7 @@ void TerminalStatus(){
       IsTradeAllowed() ? "Enabled" : "Disabled",
       IsExpertEnabled() ? "Enabled" : "Disabled", 
       IsConnected() ? "Connected" : "Not Connected"
-      ), __FUNCTION__, true, true);   
+      ), __FUNCTION__, true, InpDebugLogging);   
 }
 
 
@@ -245,16 +249,14 @@ void RefreshNews() {
    int num_news_data = news_events.FetchData();
    interval_trade.logger(StringFormat("%i news events added. %i events today.", num_news_data, news_events.NumNewsToday()), __FUNCTION__);
    
+   
 }
-
-
-
 
 void EventsSymbolToday(){
    interval_trade.logger(StringFormat("High Impact News Today: %s \nNum News Today: %i",
       (string)news_events.HighImpactNewsToday(), 
       news_events.GetNewsSymbolToday()
-      ), __FUNCTION__, false, true);
+      ), __FUNCTION__, false, InpDebugLogging);
 }
 
 void EventsInWindow(){
@@ -262,7 +264,7 @@ void EventsInWindow(){
    interval_trade.logger(StringFormat("Entry Window: %s - %s, Num Events: %i",
       TimeToString(TRADE_QUEUE.curr_trade_open),
       TimeToString(TRADE_QUEUE.curr_trade_close),
-      events_in_window), __FUNCTION__, true, true);
+      events_in_window), __FUNCTION__, true, InpDebugLogging);
 }
 
 
@@ -284,3 +286,4 @@ Points to target
 Remaining target
 
 */
+
