@@ -105,6 +105,7 @@ int OnInit()
    interval_trade.BrokerCommission();
    
    
+   
    return(INIT_SUCCEEDED);
 
   }

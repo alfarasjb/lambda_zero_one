@@ -156,7 +156,7 @@ class CIntervalTrade{
       int               util_symbol_digits();
       string            util_norm_price(double value);
       double            util_norm_value(double value);
-      double            util_spread_target();
+      int               util_spread_target();
       
       double            account_balance();
       double            account_equity();
@@ -749,20 +749,17 @@ bool  CIntervalTrade::IgnoreSpreadConstraint(void) {
    conditions: 
       1. evaluation phase - challenge, and not reached profit target 
       2. tp ticks/points has to be below threshold 
-      3. spread has to be less than tp ticks/points 
    */
    
-   int tp_threshold_points = 50;
+   int tp_threshold_points = InpTPSpreadThresh;
    
-   double tp_points     = CalcTP() / trade_points; 
-   double spread        = util_market_spread();
+   int tp_points     = (int)(CalcTP() / trade_points); 
    
    if (!EvaluationPhase()) return false;
    if (tp_threshold_points < tp_points) return false;
-   if (spread > tp_points) return false;
-   logger(StringFormat("Spread Constraint Ignored. Threshold: %d, Spread: %d, TP Points: %d", 
+   
+   logger(StringFormat("Spread Constraint Ignored. Threshold: %i, TP Points: %i", 
       tp_threshold_points, 
-      spread, 
       tp_points), __FUNCTION__,true);
    return true;
 }
@@ -832,7 +829,7 @@ double CIntervalTrade::CalcLot(){
    // RISK SCALING 
    double risk_scaling = RiskScaling();
    
-   double scaled_lot = RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling * risk_scaling;
+   double scaled_lot = (RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling * risk_scaling) * tick_value;
    
    // Clipping. Prevents over sizing.
    scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
@@ -1634,7 +1631,7 @@ int CIntervalTrade::SendMarketOrder(void){
    */
    
    //double spread_target = IgnoreSpreadConstraint() ? CalcTP() / trade_points : RISK_PROFILE.RP_spread; //BETA
-   double spread_target = util_spread_target(); 
+   int spread_target = util_spread_target(); 
    
    ENUM_ORDER_TYPE order_type = util_market_ord_type();
    if (TimeCurrent() >= TRADE_QUEUE.curr_trade_open) SetDelayedEntry(util_delayed_entry_reference()); // sets the reference price to the entry window candle open price
@@ -1687,7 +1684,10 @@ int CIntervalTrade::SendMarketOrder(void){
    
    
    int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), entry_price, sl_price, tp_price);
-   if (ticket == -1) logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()), __FUNCTION__, true);
+   if (ticket == -1) {
+      logger(StringFormat("ORDER SEND FAILED. ERROR: %i", GetLastError()), __FUNCTION__, true);
+      return -1;
+   }
    SetTradeOpenDatetime(TimeCurrent(), ticket);
    
    ActivePosition ea_pos;
@@ -1741,11 +1741,23 @@ bool CIntervalTrade::UpdateCSV(string log_type){
    datetime current = TimeCurrent();
    
    if (log_type == "open"){
-      csv_message = current+",open,"+TRADE_LOG.order_open_ticket+","+TRADE_LOG.order_open_price+","+TRADE_LOG.order_open_time+","+TRADES_ACTIVE.trade_close_datetime+","+TRADE_LOG.order_open_spread;
-   }
+      csv_message = StringFormat("%s,open,%i,%f,%s,%s,%i", 
+         TimeToString(current),
+         (int)TRADE_LOG.order_open_ticket, 
+         TRADE_LOG.order_open_price, 
+         TimeToString(TRADE_LOG.order_open_time),
+         TimeToString(TRADES_ACTIVE.trade_close_datetime),
+         (int)TRADE_LOG.order_open_spread);
+      }
    
    if (log_type == "close"){
-      csv_message = current+",close,"+TRADE_LOG.order_close_ticket+","+TRADE_LOG.order_close_price+","+TRADE_LOG.order_open_time+","+current+","+TRADE_LOG.order_close_spread;
+      csv_message = StringFormat("%s,close,%i,%f,%s,%s,%i", 
+         TimeToString(current),
+         (int)TRADE_LOG.order_close_ticket, 
+         TRADE_LOG.order_close_price, 
+         TimeToString(TRADE_LOG.order_open_time),
+         TimeToString(current),
+         (int)TRADE_LOG.order_close_spread);
    }
    
    if (log_type == "delayed"){
@@ -2200,10 +2212,10 @@ int      CIntervalTrade::util_shift_to_entry(void) {
    return shift;
 }
 
-double   CIntervalTrade::util_spread_target(void) { 
+int   CIntervalTrade::util_spread_target(void) { 
    // if spread constraint is ignored, algo uses points to tp. 
    double target = IgnoreSpreadConstraint() ? CalcTP() / trade_points : RISK_PROFILE.RP_spread;
-   return target; 
+   return (int)target; 
 }
 // ------------------------------- UTILS AND WRAPPERS ------------------------------- //
 

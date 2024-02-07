@@ -330,6 +330,7 @@ input float             InpLiveScale      = 0.5; // LIVE ACCOUNT SCALING
 input float             InpLiveDDScale    = 0.25; // LIVE ACCOUNT DRAWDOWN SCALING
 input float             InpMinTargetPts   = 50; // MIN TP POINTS
 input float             InpPropDDThresh   = 5; // CHALLENGE ACCOUNT DRAWDOWN THRESHOLD 
+input int               InpTPSpreadThresh = 50; // TP Points Ceiling to Ignore RP Spread. 
 
 input string            InpMisc           = "========== MISC =========="; // ========== MISC ==========
 input SpreadManagement  InpSpreadMgt      = Recursive; // SPREAD MANAGEMENT
