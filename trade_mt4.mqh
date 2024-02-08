@@ -758,11 +758,9 @@ bool  CIntervalTrade::IgnoreSpreadConstraint(void) {
    if (!EvaluationPhase()) return false;
    if (tp_threshold_points < tp_points) return false;
    
-   logger(StringFormat("Spread Constraint Ignored. \nThreshold: %i \nTP Points: %i, Bid: %s, Ask %s", 
+   logger(StringFormat("Spread Constraint Ignored. \nThreshold: %i \nTP Points: %i", 
       tp_threshold_points, 
-      tp_points,
-      util_norm_price(util_price_bid()),
-      util_norm_price(util_price_ask())
+      tp_points
       ), __FUNCTION__,true);
    return true;
 }
@@ -950,7 +948,12 @@ void CIntervalTrade::SetDelayedEntry(double price){
    /*
    Sets delayed entry reference price when spreads are too wide
    */
-   logger(StringFormat("Last Open: %s \nSet Delayed Entry Reference Price: %s \nSpread: %.2f", util_norm_price(util_entry_candle_open()), util_norm_price(price), util_market_spread()), __FUNCTION__, true);
+   logger(StringFormat("Last Open: %s \nSet Delayed Entry Reference Price: %s \nSpread: %.2f \nBid: %s \nAsk: %s", 
+      util_norm_price(util_entry_candle_open()), 
+      util_norm_price(price), 
+      util_market_spread(),
+      util_norm_price(util_price_bid()),
+      util_norm_price(util_price_ask())), __FUNCTION__, true);
    
    delayed_entry_reference = price;
 }
