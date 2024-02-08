@@ -144,7 +144,7 @@ class CIntervalTrade{
       double            util_price_bid();
       int               util_interval_day();
       int               util_interval_current();
-      double            util_delayed_entry_reference();
+      double            util_delayed_entry_reference(double spread_target);
       ENUM_ORDER_TYPE   util_market_ord_type();
       ENUM_ORDER_TYPE   util_pending_ord_type();
       int               util_is_pending(ENUM_ORDER_TYPE ord_type);
@@ -758,9 +758,10 @@ bool  CIntervalTrade::IgnoreSpreadConstraint(void) {
    if (!EvaluationPhase()) return false;
    if (tp_threshold_points < tp_points) return false;
    
-   logger(StringFormat("Spread Constraint Ignored. Threshold: %i, TP Points: %i", 
+   logger(StringFormat("Spread Constraint Ignored. \nThreshold: %i \nTP Points: %i", 
       tp_threshold_points, 
-      tp_points), __FUNCTION__,true);
+      tp_points
+      ), __FUNCTION__,true);
    return true;
 }
 // ------------------------------- FUNDED ------------------------------- //
@@ -866,7 +867,7 @@ double CIntervalTrade::SetChallengeAccountTakeProfit(){
       double take_profit_price = EvaluationPhase() ? (entry_price + (tp_points * factor)) : 0;
       
       int m = OP_ModifyTP(take_profit_price);
-      if (m) logger(StringFormat("Modified Take Profit for Ticket: %i. Trade Points: %f, Take Profit: %f", ticket, tp_points, take_profit_price), __FUNCTION__, true);
+      if (m) logger(StringFormat("Modified Take Profit for Ticket: %i. \nTrade Points: %f \nTake Profit: %f", ticket, tp_points, take_profit_price), __FUNCTION__, true);
    }
    
    return 0;   
@@ -947,7 +948,12 @@ void CIntervalTrade::SetDelayedEntry(double price){
    /*
    Sets delayed entry reference price when spreads are too wide
    */
-   logger(StringFormat("Last Open: %s \nSet Delayed Entry Reference Price: %s \nSpread: %.2f", util_norm_price(util_entry_candle_open()), util_norm_price(price), util_market_spread()), __FUNCTION__, true);
+   logger(StringFormat("Last Open: %s \nSet Delayed Entry Reference Price: %s \nSpread: %.2f \nBid: %s \nAsk: %s", 
+      util_norm_price(util_entry_candle_open()), 
+      util_norm_price(price), 
+      util_market_spread(),
+      util_norm_price(util_price_bid()),
+      util_norm_price(util_price_ask())), __FUNCTION__, true);
    
    delayed_entry_reference = price;
 }
@@ -1634,7 +1640,7 @@ int CIntervalTrade::SendMarketOrder(void){
    int spread_target = util_spread_target(); 
    
    ENUM_ORDER_TYPE order_type = util_market_ord_type();
-   if (TimeCurrent() >= TRADE_QUEUE.curr_trade_open) SetDelayedEntry(util_delayed_entry_reference()); // sets the reference price to the entry window candle open price
+   if (TimeCurrent() >= TRADE_QUEUE.curr_trade_open) SetDelayedEntry(util_delayed_entry_reference(spread_target)); // sets the reference price to the entry window candle open price
    int delay = InpSpreadDelay * 1000; // Spread delay in seconds * 1000 milliseconds
    if (util_market_spread() > spread_target) { UpdateCSV("delayed"); }
    
@@ -2107,7 +2113,7 @@ ENUM_ORDER_TYPE CIntervalTrade::util_market_ord_type(void){
    return -1; 
 }
 
-double CIntervalTrade::util_delayed_entry_reference(void){
+double CIntervalTrade::util_delayed_entry_reference(double spread_target){
    
    /*
    Gets delayed entry reference price during time intervals with large spreads. 
@@ -2119,7 +2125,7 @@ double CIntervalTrade::util_delayed_entry_reference(void){
    double last_open = util_shift_to_entry() == 0 ? util_last_candle_open() : util_entry_candle_open();
    double reference;
    //double spread_factor = RISK_PROFILE.RP_spread * trade_points;
-   double spread_factor = util_spread_target() * trade_points;
+   double spread_factor = spread_target * trade_points;
    
    switch(RISK_PROFILE.RP_order_type){
       case Long:
