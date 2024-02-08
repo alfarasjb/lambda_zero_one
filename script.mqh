@@ -128,7 +128,7 @@ void OnDeinit(const int reason)
       PORTFOLIO.peak_equity, 
       interval_trade.account_balance()), __FUNCTION__, false, InpDebugLogging);
       
-   interval_trade.ClearHistory();
+  interval_trade.ClearHistory();
   if (IsTesting()) export_hist.ExportAccountHistory();
   }
   
@@ -271,7 +271,7 @@ void EventsInWindow(){
 void Accounts(bool notify = false){
    interval_trade.UpdateAccounts();
    
-   interval_trade.logger(StringFormat("Balance: %s \nProfit: %s \nRemaining: %s \n TP Points: %s", 
+   interval_trade.logger(StringFormat("Balance: %s \nProfit: %s \nRemaining: %s \nTP Points: %s", 
       DoubleToString(interval_trade.account_balance(), 2), 
       DoubleToString(interval_trade.ACCOUNT_GAIN, 2),
       DoubleToString(interval_trade.FUNDED_REMAINING_TARGET, 2),
