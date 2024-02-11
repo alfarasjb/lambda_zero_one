@@ -619,10 +619,14 @@ float CIntervalTrade::CalcDrawdownScaling(double alpha) {
          // 1 - alpha ^ (1 - 2d)
          return 1 - MathPow(alpha, exponent);
          break;
+      case MODE_NONE:
+         return alpha;
+         break;
       default:
+         return alpha;
          break;
    }
-   return 0;
+   return alpha;
 } 
 
 bool CIntervalTrade::IsUnderperforming(void){
