@@ -41,6 +41,11 @@ enum EnumLosingStreak{
    Last,
 };
 
+enum DrawdownScaling{
+   MODE_LINEAR,
+   MODE_EXPONENTIAL,
+};
+
 enum EnumOrderSendError{
    ERR_INTERVAL_BAD_SPREAD = -10,
    ERR_INTERVAL_INVALID_PRICE = -20,
@@ -62,9 +67,10 @@ struct RiskProfile{
 
    double            RP_amount;
    float             RP_lot, RP_spread; 
-   int               RP_holdtime;
+   int               RP_holdtime, RP_min_holdtime;
    Orders            RP_order_type; 
    ENUM_TIMEFRAMES   RP_timeframe;
+   bool              RP_early_close;
    
 } RISK_PROFILE;
 
@@ -82,7 +88,7 @@ struct TradeLog{
 
 struct TradeQueue{
 
-   datetime next_trade_open, next_trade_close, curr_trade_open, curr_trade_close;
+   datetime next_trade_open, next_trade_close, curr_trade_open, curr_trade_close, curr_trade_early_close, next_trade_early_close; 
 } TRADE_QUEUE;
 
 struct ActivePosition{
@@ -298,10 +304,12 @@ input string            InpRiskProfile    = "========== RISK PROFILE =========="
 input float             InpRPDeposit      = 100000; // RISK PROFILE: Deposit
 input float             InpRPRiskPercent  = 1; // RISK PROFILE: Risk Percent
 input float             InpRPLot          = 10; // RISK PROFILE: Lot
+input int               InpRPSecure       = 5; // RISK PROFILE: Early Lock Profits
 input int               InpRPHoldTime     = 5; // RISK PROFILE: Hold Time
 input Orders            InpRPOrderType    = Long; // RISK PROFILE: Order Type
 input ENUM_TIMEFRAMES   InpRPTimeframe    = PERIOD_M15; // RISK PROFILE: Timeframe
 input float             InpRPSpread       = 10; // RISK PROFILE: Spread
+input bool              InpRPEarlyClose   = true; // RISK PROFILE: Early Close
 
 input string            InpEntry          = "========== ENTRY WINDOW =========="; // ========== ENTRY WINDOW ==========
 input int               InpEntryHour      = 0; // ENTRY WINDOW HOUR 
@@ -321,6 +329,7 @@ input float             InpAbsDDThresh    = 10; // ABSOLUTE DRAWDOWN THRESHOLD
 input HistoryInterval   InpHistInterval   = All; // HISTORY INTERVAL - Tracking Equity Drawdown
 input int               InpMinLoseStreak  = 3; // MINIMUM CONSECUTIVE LOSING TRADES
 input double            InpEquityDDThresh = 5; // EQUITY DRAWDOWN THRESHOLD
+input DrawdownScaling   InpDrawdownScale  = MODE_LINEAR; // DRAWDOWN SCALING TYPE
 
 input string            InpFunded         = "========== FUNDED =========="; // ========== FUNDED ==========
 input float             InpProfitTarget   = 10; // PROFIT TARGET 

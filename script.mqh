@@ -147,7 +147,7 @@ void OnTick()
             
          bool EventsInEntryWindow = news_events.HighImpactNewsInEntryWindow(); 
          bool backtest_events_in_window = InpTradeOnNews ? false : calendar_loader.EventInWindow(TRADE_QUEUE.curr_trade_open, TRADE_QUEUE.curr_trade_close);
-         interval_trade.logger(StringFormat("Events In Entry Window: %s, Backtest Events In Window: %s", (string)EventsInEntryWindow, (string)backtest_events_in_window), __FUNCTION__, false, true);
+         interval_trade.logger(StringFormat("Events In Entry Window: %s, Backtest Events In Window: %s", (string)EventsInEntryWindow, (string)backtest_events_in_window), __FUNCTION__, false, InpDebugLogging);
   
          if (!backtest_events_in_window && !EventsInEntryWindow) {
             
@@ -165,6 +165,10 @@ void OnTick()
          if (interval_trade.EquityReachedProfitTarget() && InpAccountType != Personal) {
         
             interval_trade.CloseOrder();
+         }
+         if (TimeCurrent() >= TRADE_QUEUE.curr_trade_early_close && TimeCurrent() < TRADE_QUEUE.curr_trade_close) { 
+            int num_early_close = interval_trade.CloseTradesInProfit();
+            interval_trade.logger(StringFormat("%i trades close early. ", num_early_close), __FUNCTION__);
          }
          if ((TimeCurrent() >= TRADE_QUEUE.curr_trade_close) && (InpTradeMgt != OpenTrailing)) {
             interval_trade.CloseOrder();      
@@ -188,7 +192,7 @@ void OnTick()
             if (calendar_loader.IsNewYear()) calendar_loader.LoadCSV(HIGH);
             
             int num_news_loaded = calendar_loader.LoadDatesToday(HIGH);
-            interval_trade.logger(StringFormat("NEWS LOADED: %i", num_news_loaded), __FUNCTION__, false, true);
+            interval_trade.logger(StringFormat("NEWS LOADED: %i", num_news_loaded), __FUNCTION__, false, InpDebugLogging);
             calendar_loader.UpdateToday();
          }
          
