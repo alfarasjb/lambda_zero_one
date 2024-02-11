@@ -44,6 +44,7 @@ enum EnumLosingStreak{
 enum DrawdownScaling{
    MODE_LINEAR,
    MODE_EXPONENTIAL,
+   MODE_NONE
 };
 
 enum EnumOrderSendError{
