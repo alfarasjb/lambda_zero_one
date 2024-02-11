@@ -53,7 +53,7 @@ class CIntervalTrade{
       
       // TRADE QUEUE
       void              SetNextTradeWindow();
-      datetime          WindowCloseTime(datetime window_open_time);
+      datetime          WindowCloseTime(datetime window_open_time, int candle_intervals);
       bool              IsTradeWindow();
       bool              IsNewDay();
       
@@ -88,6 +88,7 @@ class CIntervalTrade{
       bool              IsRiskFree(int ticket);
       bool              OrderIsClosed(int ticket);
       bool              PreEntry();
+      int               CloseTradesInProfit();
       
       
       // FUNDED
@@ -103,6 +104,7 @@ class CIntervalTrade{
       double            SetChallengeAccountTakeProfit();
       bool              IsUnderperforming();
       bool              IgnoreSpreadConstraint();
+      float             CalcDrawdownScaling(double alpha);
       
       // TRADE OPERATIONS
       
@@ -577,24 +579,24 @@ float CIntervalTrade::RiskScaling(void){
    */
    switch(InpAccountType){
       case Personal: 
-         if (IsUnderperforming()) return InpDDScale;
+         if (IsUnderperforming()) return CalcDrawdownScaling(InpDDScale);
          return 1; 
          break;
          
       case Challenge:
          if (BelowAbsoluteDrawdownThreshold()) {
-            if (!ProfitTargetReached()) return InpChallDDScale;
-            return InpLiveDDScale;
+            if (!ProfitTargetReached()) return CalcDrawdownScaling(InpChallDDScale);
+            return CalcDrawdownScaling(InpLiveDDScale);
          }
          
-         if (ProfitTargetReached() && IsUnderperforming()) return InpLiveDDScale;
-         if (ProfitTargetReached()) return InpLiveScale;
-         return InpChallScale;
+         if (ProfitTargetReached() && IsUnderperforming()) return CalcDrawdownScaling(InpLiveDDScale);
+         if (ProfitTargetReached()) return CalcDrawdownScaling(InpLiveScale);
+         return CalcDrawdownScaling(InpChallScale);
          break;
          
       case Funded:
-         if (IsUnderperforming()) return InpLiveDDScale;
-         return InpLiveScale;
+         if (IsUnderperforming()) return CalcDrawdownScaling(InpLiveDDScale);
+         return CalcDrawdownScaling(InpLiveScale);
          break;
          
       default: 
@@ -602,6 +604,26 @@ float CIntervalTrade::RiskScaling(void){
          break;
    }
 }
+
+float CIntervalTrade::CalcDrawdownScaling(double alpha) {
+   // (peak - current) / peak
+   double drawdown = (PORTFOLIO.peak_equity - account_balance()) / PORTFOLIO.peak_equity; 
+   double exponent = 1 - (2 * drawdown);
+   //Print("DRAWDOWN: ", drawdown);
+   switch(InpDrawdownScale) { 
+      case MODE_LINEAR:
+         // alpha * (1 - d)
+         return alpha * (1 - drawdown);
+         break; 
+      case MODE_EXPONENTIAL:
+         // 1 - alpha ^ (1 - 2d)
+         return 1 - MathPow(alpha, exponent);
+         break;
+      default:
+         break;
+   }
+   return 0;
+} 
 
 bool CIntervalTrade::IsUnderperforming(void){
    /*
@@ -799,6 +821,8 @@ void CIntervalTrade::SetRiskProfile(void){
       RISK_PROFILE.RP_order_type = InpRPOrderType;
       RISK_PROFILE.RP_timeframe = InpRPTimeframe;
       RISK_PROFILE.RP_spread = InpRPSpread;
+      RISK_PROFILE.RP_min_holdtime = InpRPSecure;
+      RISK_PROFILE.RP_early_close = InpRPEarlyClose;
 }
 
 double CIntervalTrade::CalcLot(){
@@ -1055,18 +1079,21 @@ void CIntervalTrade::SetNextTradeWindow(void){
    TRADE_QUEUE.curr_trade_open = entry;
    TRADE_QUEUE.next_trade_open = TimeCurrent() > entry ? entry + util_interval_day() : entry;
    
-   TRADE_QUEUE.curr_trade_close = WindowCloseTime(TRADE_QUEUE.curr_trade_open);
-   TRADE_QUEUE.next_trade_close = WindowCloseTime(TRADE_QUEUE.next_trade_open);
+   TRADE_QUEUE.curr_trade_early_close = WindowCloseTime(TRADE_QUEUE.curr_trade_open, RISK_PROFILE.RP_min_holdtime);
+   TRADE_QUEUE.next_trade_early_close = WindowCloseTime(TRADE_QUEUE.next_trade_open, RISK_PROFILE.RP_min_holdtime);
+   
+   TRADE_QUEUE.curr_trade_close = WindowCloseTime(TRADE_QUEUE.curr_trade_open, RISK_PROFILE.RP_holdtime);
+   TRADE_QUEUE.next_trade_close = WindowCloseTime(TRADE_QUEUE.next_trade_open, RISK_PROFILE.RP_holdtime);
    
 }
 
-datetime CIntervalTrade::WindowCloseTime(datetime window_open_time){
+datetime CIntervalTrade::WindowCloseTime(datetime window_open_time, int candle_intervals){
 
    /*
    Returns trading window closing time.
    */
 
-   window_open_time = window_open_time + (util_interval_current() * RISK_PROFILE.RP_holdtime);
+   window_open_time = window_open_time + (util_interval_current() * candle_intervals);
    return window_open_time;
    
 }
@@ -1287,6 +1314,38 @@ void CIntervalTrade::CheckOrderDeadline(void){
       OP_CloseTrade(pos.pos_ticket); 
    }
 }
+
+int CIntervalTrade::CloseTradesInProfit(void) { 
+
+   if (!RISK_PROFILE.RP_early_close) return 0; 
+   
+   int active = NumActivePositions();
+   if (active == 0) return 0;
+   
+   logger(StringFormat("Attempting To Close Trades in profit. %i order/s found.", active), __FUNCTION__);
+   int count = 0; 
+   for (int i = 0; i < active; i++) {
+      ActivePosition pos = TRADES_ACTIVE.active_positions[i];
+      int t = OP_OrderSelectByTicket(pos.pos_ticket);
+      if (PosProfit() <= 0) continue; 
+      
+      if (OrderIsClosed(pos.pos_ticket)) {
+         logger(StringFormat("Order Ticket: %i is alreadyclosed. %i Position in Order Pool", pos.pos_ticket, NumActivePositions()), __FUNCTION__); 
+         if (!TicketInPortfolioHistory(pos.pos_ticket)) {
+            TradesHistory latest = LastEntry();
+            
+            if (pos.pos_ticket == latest.ticket) UpdateHistoryWithLastValue();
+            
+            else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, pos.pos_ticket), __FUNCTION__);
+         }
+         continue;
+      }           
+      int c = OP_CloseTrade(pos.pos_ticket); 
+      if (c) count+=1; 
+   }
+   return count;
+}
+
 
 
 
@@ -1917,7 +1976,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
             
             else logger(StringFormat("Ticket Mismatch. Latest: %i, Closed: %i", latest.ticket, ticket), __FUNCTION__); 
          }
-         return 1;
+         return 0;
    }
    
    ENUM_ORDER_TYPE ord_type = OrderType();
