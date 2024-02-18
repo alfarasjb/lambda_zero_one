@@ -152,7 +152,7 @@ void OnTick()
          if (!backtest_events_in_window && !EventsInEntryWindow) {
             
             // sends market order
-            int order_send_result = interval_trade.SendMarketOrder();
+            int order_send_result = interval_trade.SendOrder();
             
             if (order_send_result < 0) interval_trade.logger(StringFormat("Order Send Failed. Configuration: %s, Reason: %s, Code: %i", 
                EnumToString(InpSpreadMgt), 

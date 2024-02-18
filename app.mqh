@@ -291,7 +291,7 @@ void CIntervalApp::RPSubWindow(string prefix){
    DrawRow(prefix, "RP Order", 4, EnumToString(RISK_PROFILE.RP_order_type));
    DrawRow(prefix, "RP Timeframe", 5, RISK_PROFILE.RP_timeframe);
    DrawRow(prefix, "RP Spread", 6, RISK_PROFILE.RP_spread);
-   
+   DrawRow(prefix, "RP Order Method", 7, EnumToString(RISK_PROFILE.RP_order_method));
 }
 void CIntervalApp::ENSubWindow(string prefix){
    string name = StringFormat("%s_terminal", prefix);
