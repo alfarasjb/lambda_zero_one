@@ -62,6 +62,11 @@ enum AlgoMode{
    MODE_BACKTEST,
 };
 
+enum OrderSendMethod{
+   MODE_MARKET, 
+   MODE_PENDING
+};
+
 // ------------------------------- TEMPLATES ------------------------------- //
 
 struct RiskProfile{
@@ -72,6 +77,7 @@ struct RiskProfile{
    Orders            RP_order_type; 
    ENUM_TIMEFRAMES   RP_timeframe;
    bool              RP_early_close;
+   OrderSendMethod   RP_order_method;
    
 } RISK_PROFILE;
 
@@ -311,6 +317,7 @@ input Orders            InpRPOrderType    = Long; // RISK PROFILE: Order Type
 input ENUM_TIMEFRAMES   InpRPTimeframe    = PERIOD_M15; // RISK PROFILE: Timeframe
 input float             InpRPSpread       = 10; // RISK PROFILE: Spread
 input bool              InpRPEarlyClose   = true; // RISK PROFILE: Early Close
+input OrderSendMethod   InpOrderMethod    = MODE_MARKET; // RISK PROFILE: Order Send Method
 
 input string            InpEntry          = "========== ENTRY WINDOW =========="; // ========== ENTRY WINDOW ==========
 input int               InpEntryHour      = 0; // ENTRY WINDOW HOUR 

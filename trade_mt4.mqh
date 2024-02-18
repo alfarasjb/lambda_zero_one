@@ -89,7 +89,7 @@ class CIntervalTrade{
       bool              OrderIsClosed(int ticket);
       bool              PreEntry();
       int               CloseTradesInProfit();
-      
+      int               SendOrder();
       
       // FUNDED
       float             RiskScaling();
@@ -830,6 +830,7 @@ void CIntervalTrade::SetRiskProfile(void){
       RISK_PROFILE.RP_spread = InpRPSpread;
       RISK_PROFILE.RP_min_holdtime = InpRPSecure;
       RISK_PROFILE.RP_early_close = InpRPEarlyClose;
+      RISK_PROFILE.RP_order_method = InpOrderMethod;
 }
 
 double CIntervalTrade::CalcLot(){
@@ -854,7 +855,6 @@ double CIntervalTrade::CalcLot(){
    // RISK PROFILE SCALING
    double risk_amount_scale_factor = InpRiskAmount / RISK_PROFILE.RP_amount;
    true_risk = InpAllocation * InpRiskAmount; 
-   Print("RP AMOUNT: ", RISK_PROFILE.RP_amount);
    
    
    // EQUITY SCALING
@@ -1664,6 +1664,15 @@ bool CIntervalTrade::DelayedAndValid(void){
    return false;
 }
 
+int CIntervalTrade::SendOrder(void) {
+   switch(RISK_PROFILE.RP_order_method) {
+      case MODE_MARKET:    return SendMarketOrder();
+      case MODE_PENDING:   return SendLimitOrder(); 
+      default: break;
+   }
+   return 0;   
+}
+
 int CIntervalTrade::SendLimitOrder(void){
    
    /*
@@ -1673,9 +1682,14 @@ int CIntervalTrade::SendLimitOrder(void){
    GetTradeParams("pending");
    
    ENUM_ORDER_TYPE order_type = util_pending_ord_type();
-   double pending_entry_price = iOpen(Symbol(), PERIOD_CURRENT, 0);
-   int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), pending_entry_price, sl_price, 0);
-   if (ticket == -1) logger("Trade Failed", __FUNCTION__);
+   double pending_entry_price = util_delayed_entry_reference(util_spread_target());
+   int ticket = OP_OrderOpen(Symbol(), order_type, CalcLot(), pending_entry_price, sl_price, tp_price);
+   
+   if (ticket == -1) {
+      logger(StringFormat("PENDING ORDER FAILED. ERROR: %i", GetLastError()), __FUNCTION__, true);
+      return -1;
+   }
+   
    SetTradeOpenDatetime(TimeCurrent(), ticket);
    
    ActivePosition ea_pos;
@@ -1684,11 +1698,15 @@ int CIntervalTrade::SendLimitOrder(void){
    ea_pos.pos_close_deadline = TRADES_ACTIVE.trade_close_datetime;
    AppendActivePosition(ea_pos);
    
+   AddOrderToday();
+   
+   SetChallengeAccountTakeProfit();
+   
    // trigger an order open log containing order open price, entry time, target close time, and spread at the time of the order
    SetOrderOpenLogInfo(pending_entry_price, TimeCurrent(), TRADES_ACTIVE.trade_close_datetime, ticket);
    if (!UpdateCSV("open")) { logger("Failed to Write To CSV. Order: OPEN", __FUNCTION__); }
    
-   return 1; 
+   return ticket; 
 }
 
 int CIntervalTrade::SendMarketOrder(void){
@@ -2012,7 +2030,7 @@ int CIntervalTrade::OP_CloseTrade(int ticket){
       case ORDER_TYPE_SELL_LIMIT:
       
          c = OrderDelete(OrderTicket());
-         if (!c) logger(StringFormat("ORDER DELETE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), __FUNCTION__);
+         if (!c) logger(StringFormat("ORDER DELETE FAILED. TICKET: %i, ERROR: %i", ticket, GetLastError()), __FUNCTION__, true);
          
          break;
          
@@ -2057,7 +2075,7 @@ int CIntervalTrade::OP_OrderOpen(
 
    logger(StringFormat("Symbol: %s \nOrder Type: %s \nVolume: %.2f \nPrice: %s \nSL: %s \nTP: %s \nSpread: %.2f \nEA ID: %s", 
       symbol, EnumToString(order_type), volume, util_norm_price(price), util_norm_price(sl), util_norm_price(tp), util_market_spread(), EA_ID), __FUNCTION__, true);
-   int ticket = OrderSend(Symbol(), order_type, CalcLot(), entry_price, 3, sl_price, tp_price, EA_ID, InpMagic, 0, clrNONE);
+   int ticket = OrderSend(Symbol(), order_type, CalcLot(), price, 3, sl_price, tp_price, EA_ID, InpMagic, 0, clrNONE);
    return ticket;
 }
 
