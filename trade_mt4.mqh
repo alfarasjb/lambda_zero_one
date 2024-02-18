@@ -13,7 +13,7 @@ class CIntervalTrade{
    public: 
       // TRADE PARAMETERS
       float       order_lot;
-      double      entry_price, sl_price, tp_price, tick_value, trade_points, delayed_entry_reference, true_risk, true_lot, ACCOUNT_DEPOSIT, ACCOUNT_CUTOFF, ACCOUNT_GAIN, FUNDED_REMAINING_TARGET;
+      double      entry_price, sl_price, tp_price, tick_value, trade_points, contract_size, delayed_entry_reference, true_risk, true_lot, ACCOUNT_DEPOSIT, ACCOUNT_CUTOFF, ACCOUNT_GAIN, FUNDED_REMAINING_TARGET;
       int         digits;
       
       // FUNDED 
@@ -159,6 +159,8 @@ class CIntervalTrade{
       string            util_norm_price(double value);
       double            util_norm_value(double value);
       int               util_spread_target();
+      double            util_symbol_contract_size();
+      double            util_symbol_lotstep();
       
       double            account_balance();
       double            account_equity();
@@ -211,6 +213,7 @@ void CIntervalTrade::InitializeSymbolProperties(void){
    tick_value = util_tick_val();
    trade_points = util_trade_pts();
    digits = util_symbol_digits();
+   contract_size = util_symbol_contract_size();
 }
 
 void CIntervalTrade::InitializeAccounts(void){
@@ -851,19 +854,24 @@ double CIntervalTrade::CalcLot(){
    // RISK PROFILE SCALING
    double risk_amount_scale_factor = InpRiskAmount / RISK_PROFILE.RP_amount;
    true_risk = InpAllocation * InpRiskAmount; 
+   Print("RP AMOUNT: ", RISK_PROFILE.RP_amount);
+   
    
    // EQUITY SCALING
    double equity_scaling = !EvaluationPhase() ? InpSizing == Dynamic ? account_balance() / ACCOUNT_DEPOSIT : 1 : 1; 
    
    // RISK SCALING 
    double risk_scaling = RiskScaling();
-   
-   double scaled_lot = (RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling * risk_scaling) * tick_value;
+   double contract = util_symbol_contract_size();
+   double scaled_lot = (RISK_PROFILE.RP_lot * InpAllocation * risk_amount_scale_factor * equity_scaling * risk_scaling) * tick_value * (1/trade_points) * (1/contract);
    
    // Clipping. Prevents over sizing.
    scaled_lot = scaled_lot > InpMaxLot ? InpMaxLot : scaled_lot; 
    
+   //PrintFormat("RP: %f, Scaled: %f, TICK VAL: %f, TRADE POINTS: %f, CONTRACT: %f", RISK_PROFILE.RP_lot, scaled_lot, tick_value, trade_points, contract);
+   //PrintFormat("ScaleFactor: %f", risk_amount_scale_factor);
    
+      
    true_lot = scaled_lot;
    
    double symbol_minlot = util_symbol_minlot();
@@ -872,7 +880,9 @@ double CIntervalTrade::CalcLot(){
    if (scaled_lot < symbol_minlot) return symbol_minlot;
    if (scaled_lot > symbol_maxlot) return symbol_maxlot;
    
-   return NormalizeDouble(scaled_lot, 2);
+   scaled_lot = util_symbol_lotstep() == 1 ? (int)scaled_lot : NormalizeDouble(scaled_lot, 2);
+   
+   return scaled_lot;
 }
 
 // ------------------------------- INIT ------------------------------- //
@@ -2254,10 +2264,12 @@ double   CIntervalTrade::util_symbol_maxlot(void)     { return MarketInfo(Symbol
 
 double   CIntervalTrade::util_trade_diff(void)        { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points))); }
 double   CIntervalTrade::util_trade_diff_points(void) { return ((RISK_PROFILE.RP_amount) / (RISK_PROFILE.RP_lot * tick_value)); }
-double   CIntervalTrade::ValueAtRisk(void)            { return CalcLot() * util_trade_diff_points(); }
+double   CIntervalTrade::ValueAtRisk(void)            { return CalcLot() * util_trade_diff_points() * tick_value; }
 double   CIntervalTrade::util_comm_adj_diff(void)     { return MathAbs((PosCommission()) / (RISK_PROFILE.RP_lot * tick_value * (1 / trade_points))); }
 int      CIntervalTrade::util_symbol_digits(void)     { return (int)SymbolInfoInteger(Symbol(), SYMBOL_DIGITS); }
 
+double   CIntervalTrade::util_symbol_contract_size(void)    { return SymbolInfoDouble(Symbol(), SYMBOL_TRADE_CONTRACT_SIZE);  }
+double   CIntervalTrade::util_symbol_lotstep(void)    { return SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP); }
 string  CIntervalTrade::util_norm_price(double value) { 
 
    string format_string = StringFormat("%%.%df", digits);
