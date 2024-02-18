@@ -283,6 +283,8 @@ void CIntervalTrade::InitHistory(void){
       uint ticket = PosTicket();
       datetime open_time = PosOpenTime();
       
+      if (PosOrderType() == 6) continue;
+      
       MqlDateTime OrderOpenTimeStruct; 
       
       TimeToStruct(open_time, OrderOpenTimeStruct);
@@ -2121,14 +2123,17 @@ double   CIntervalTrade::account_deposit(void) {
    
    Deposit is the last entry, hence the loop is decrementing. 
    */
+   if (InpUseDummy) return InpDummyDeposit;
    int num_history = OrdersHistoryTotal();
    
+   double total = 0;
    for (int i = num_history; i >= 0; i--){
       int s = OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
-      if (OrderType() == 6) return OrderProfit();
+      if (OrderType() == 6) total += OrderProfit();
    }
    //logger("Deposit not found. Using Dummy.", __FUNCTION__);
-   return InpDummyDeposit; 
+   if (IsTesting()) return InpDummyDeposit;
+   return total;
 }
 
 #endif

@@ -363,6 +363,7 @@ input bool              InpTerminalMsg    = true; // TERMINAL LOGGING - Enables/
 input bool              InpPushNotifs     = false; // PUSH NOTIFICATIONS
 
 input string            InpBacktest       = "========== BACKTEST =========="; // ========== BACKTEST ==========
+input bool              InpUseDummy       = false; // USE DUMMY DEPOSIT
 input double            InpDummyDeposit   = 100000; // BACKTEST DUMMY DEPOSIT - For strategy tester
 input string            InpBacktestStart  = "2020.01.01"; // BACKTEST START DATE 
 input bool              InpDebugLogging   = false; // DEBUG LOGGING
